@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>XIUI 基础示例</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <style>
     :root {
       --bg-primary: #0f0f23;
@@ -226,6 +228,51 @@
       opacity: 0.8;
     }
 
+    #dataset-selector {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    #dataset-selector label {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    #dataset-selector select {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+    }
+
+    #dataset-selector select:focus { border-color: var(--accent); }
+
+    #dataset-selector button {
+      padding: 8px 20px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    #dataset-selector button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
     #input-area {
       display: flex;
       gap: 10px;
@@ -289,6 +336,20 @@
       <h1>XIUI 基础示例</h1>
       <span class="badge">v1.0.0</span>
     </div>
+    
+    <div id="dataset-selector">
+      <label>选择测试数据集：</label>
+      <select id="dataset-select" value="basic">
+        <option value="basic" selected>基础示例</option>
+        <option value="math">数学公式</option>
+        <option value="multiple">多卡片组合</option>
+        <option value="form">表单输入</option>
+        <option value="summary">总结卡片</option>
+        <option value="confirm">确认弹窗</option>
+      </select>
+      <button onclick="loadDataset()">加载</button>
+    </div>
+    
     <div id="output"></div>
     <div id="input-area">
       <input type="text" id="user-input" placeholder="输入消息..." />
@@ -328,7 +389,16 @@
           this.markdownBuffer = [];
           return;
         }
-        const html = marked.parse(md);
+        let html = marked.parse(md);
+        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
+          try {
+            const span = document.createElement('span');
+            katex.render(formula.trim(), span, { throwOnError: false });
+            return span.innerHTML;
+          } catch (e) {
+            return `<code>${formula}</code>`;
+          }
+        });
         const div = document.createElement('div');
         div.className = 'text';
         div.innerHTML = html;
@@ -349,7 +419,16 @@
 
       onCardLine(card, line) {
         this.cardLines.push(line);
-        const html = marked.parse(line);
+        let html = marked.parse(line);
+        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
+          try {
+            const span = document.createElement('span');
+            katex.render(formula.trim(), span, { throwOnError: false });
+            return span.innerHTML;
+          } catch (e) {
+            return `<code>${formula}</code>`;
+          }
+        });
         const div = document.createElement('div');
         div.className = 'card-line';
         div.innerHTML = html;
@@ -437,66 +516,201 @@
       }
     }
 
-    const renderer = new DOMRenderer();
-    const parser = new Parser(renderer);
+    let renderer = new DOMRenderer();
+    let parser = new Parser(renderer);
 
-    const demoResponse = [
-      '今天我们来学习 Python 的**可变类型**和**不可变类型**。',
-      '',
-      '<!-- card:choice:c1 -->',
-      '下面哪个是可变类型？',
-      '- A. 整数 int',
-      '- B. 字符串 str',
-      '- C. 列表 list',
-      '- D. 元组 tuple',
-      '<!-- /card -->',
-      '',
-      '<!-- card:tip:t1 -->',
-      '> 💡 知识点：可变类型可以在原地修改，不可变类型每次修改都会创建新对象。',
-      '<!-- /card -->',
-      '',
-      '<!-- card:progress:p1 -->',
-      '**学习进度** 50% (1/2)',
-      '<!-- /card -->',
-      '',
-      '<!-- card:submit:s1 -->',
-      '提交答案',
-      '<!-- /card -->',
-    ];
+    const datasets = {
+      basic: [
+        '今天我们来学习 Python 的**可变类型**和**不可变类型**。',
+        '',
+        '<!-- card:choice:c1 -->',
+        '下面哪个是可变类型？',
+        '- A. 整数 int',
+        '- B. 字符串 str',
+        '- C. 列表 list',
+        '- D. 元组 tuple',
+        '<!-- /card -->',
+        '',
+        '<!-- card:tip:t1 -->',
+        '> 💡 知识点：可变类型可以在原地修改，不可变类型每次修改都会创建新对象。',
+        '<!-- /card -->',
+        '',
+        '<!-- card:progress:p1 -->',
+        '**学习进度** 50% (1/2)',
+        '<!-- /card -->',
+        '',
+        '<!-- card:submit:s1 -->',
+        '提交答案',
+        '<!-- /card -->',
+      ],
+      math: [
+        '下面是一些常用的数学公式：',
+        '',
+        '**二次方程求根公式：**',
+        '$$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$',
+        '',
+        '**勾股定理：**',
+        '$$ a^2 + b^2 = c^2 $$',
+        '',
+        '**微积分基本定理：**',
+        '$$ \\int_a^b f(x)dx = F(b) - F(a) $$',
+        '',
+        '<!-- card:choice:math1 -->',
+        '如果 a=1, b=2, c=1，方程 x²+2x+1=0 的解是？',
+        '- A. x=1',
+        '- B. x=-1',
+        '- C. x=±1',
+        '- D. 无解',
+        '<!-- /card -->',
+        '',
+        '<!-- card:tip:math_tip -->',
+        '> 💡 判别式 Δ = b² - 4ac，当 Δ=0 时方程有唯一解。',
+        '<!-- /card -->',
+        '',
+        '<!-- card:submit:math_submit -->',
+        '提交答案',
+        '<!-- /card -->',
+      ],
+      multiple: [
+        '欢迎来到综合测试！',
+        '',
+        '<!-- card:choice:q1 -->',
+        '问题1：HTML 是什么的缩写？',
+        '- A. HyperText Markup Language',
+        '- B. HighTech Modern Language',
+        '- C. HyperText Management Language',
+        '- D. High Tech Markup Language',
+        '<!-- /card -->',
+        '',
+        '<!-- card:choice:q2 -->',
+        '问题2：CSS 是什么的缩写？',
+        '- A. Computer Style Sheets',
+        '- B. Creative Style System',
+        '- C. Cascading Style Sheets',
+        '- D. Colorful Style Sheets',
+        '<!-- /card -->',
+        '',
+        '<!-- card:choice:q3 -->',
+        '问题3：JavaScript 是什么类型的语言？',
+        '- A. 编译型',
+        '- B. 解释型',
+        '- C. 静态类型',
+        '- D. 强类型',
+        '<!-- /card -->',
+        '',
+        '<!-- card:tip:multi_tip -->',
+        '> 💡 提示：这三个问题都和 Web 前端开发有关。',
+        '<!-- /card -->',
+        '',
+        '<!-- card:progress:multi_progress -->',
+        '**测试进度** 100% (3/3)',
+        '<!-- /card -->',
+        '',
+        '<!-- card:submit:multi_submit -->',
+        '提交所有答案',
+        '<!-- /card -->',
+      ],
+      form: [
+        '请填写以下表单信息：',
+        '',
+        '<!-- card:input:name -->',
+        '您的姓名',
+        '*(请输入您的真实姓名)*',
+        '<!-- /card -->',
+        '',
+        '<!-- card:input:email -->',
+        '电子邮箱',
+        '*(请输入有效的邮箱地址)*',
+        '<!-- /card -->',
+        '',
+        '<!-- card:choice:gender -->',
+        '性别',
+        '- A. 男',
+        '- B. 女',
+        '- C. 其他',
+        '<!-- /card -->',
+        '',
+        '<!-- card:tip:form_tip -->',
+        '> 💡 所有字段均为必填项，请确保信息准确。',
+        '<!-- /card -->',
+        '',
+        '<!-- card:submit:form_submit -->',
+        '提交表单',
+        '<!-- /card -->',
+      ],
+      summary: [
+        '学习成果总结',
+        '',
+        '<!-- card:summary:s1 -->',
+        '| 学习时长 | 2小时 |',
+        '| 掌握知识点 | 5个 |',
+        '<!-- /card -->',
+        '',
+        '<!-- card:summary:s2 -->',
+        '| 正确率 | 80% |',
+        '| 排名 | 第5名 |',
+        '<!-- /card -->',
+        '',
+        '恭喜你完成了本次学习！',
+      ],
+      confirm: [
+        '您即将提交答案，请确认：',
+        '',
+        '<!-- card:confirm:confirm1 -->',
+        '**确认提交？**',
+        '提交后将无法修改答案',
+        '> 确认 | 取消',
+        '<!-- /card -->',
+      ],
+    };
 
-    renderer._createMessage();
-    const cursor = renderer.showCursor();
+    function startStreaming(response) {
+      output.innerHTML = '';
+      renderer = new DOMRenderer();
+      parser = new Parser(renderer);
 
-    const fullText = demoResponse.join('\n');
-    let charIndex = 0;
-    const typeSpeed = 30;
-    let currentLine = '';
+      renderer._createMessage();
+      const cursor = renderer.showCursor();
 
-    function typeNext() {
-      if (charIndex >= fullText.length) {
-        if (currentLine) {
-          parser.feed(currentLine);
+      const fullText = response.join('\n');
+      let charIndex = 0;
+      const typeSpeed = 30;
+      let currentLine = '';
+
+      function typeNext() {
+        if (charIndex >= fullText.length) {
+          if (currentLine) {
+            parser.feed(currentLine);
+          }
+          renderer._flushMarkdown();
+          cursor.remove();
+          return;
         }
-        renderer._flushMarkdown();
-        cursor.remove();
-        return;
+
+        const char = fullText[charIndex];
+
+        if (char === '\n') {
+          parser.feed(currentLine);
+          currentLine = '';
+        } else {
+          currentLine += char;
+        }
+
+        charIndex++;
+        output.scrollTop = output.scrollHeight;
+        setTimeout(typeNext, typeSpeed);
       }
 
-      const char = fullText[charIndex];
-
-      if (char === '\n') {
-        parser.feed(currentLine);
-        currentLine = '';
-      } else {
-        currentLine += char;
-      }
-
-      charIndex++;
-      output.scrollTop = output.scrollHeight;
-      setTimeout(typeNext, typeSpeed);
+      setTimeout(typeNext, 500);
     }
 
-    setTimeout(typeNext, 500);
+    window.loadDataset = function() {
+      const select = document.getElementById('dataset-select');
+      const key = select.value;
+      if (datasets[key]) {
+        startStreaming(datasets[key]);
+      }
+    };
 
     window.sendMessage = function() {
       const input = document.getElementById('user-input');
@@ -509,6 +723,8 @@
       output.appendChild(message);
       input.value = '';
     };
+
+    startStreaming(datasets.basic);
   </script>
 </body>
 </html>
