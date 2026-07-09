@@ -361,6 +361,8 @@
         this.textBuffer = '';
         this.contentEl = null;
         this.currentTextEl = null;
+        this.cardPreviewEl = null;
+        this.cardPreviewBuffer = '';
         this.pendingRender = null;
       }
 
@@ -372,9 +374,10 @@
         this.contentEl = messageEl.querySelector('.content');
       }
 
-      _renderText() {
-        if (!this.textBuffer.trim()) return;
-        let html = marked.parse(this.textBuffer);
+      _renderText(buffer, inCard) {
+        if (!buffer.trim()) return;
+        
+        let html = marked.parse(buffer);
         html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
           try {
             const span = document.createElement('span');
@@ -384,15 +387,40 @@
             return `<code>${formula}</code>`;
           }
         });
-        if (!this.currentTextEl) {
-          this.currentTextEl = document.createElement('div');
-          this.currentTextEl.className = 'text';
-          this.contentEl.appendChild(this.currentTextEl);
+
+        if (inCard) {
+          if (!this.cardPreviewEl) {
+            this.cardPreviewEl = document.createElement('div');
+            this.cardPreviewEl.className = 'card-preview';
+            this.contentEl.appendChild(this.cardPreviewEl);
+          }
+          this.cardPreviewEl.innerHTML = html;
+        } else {
+          if (!this.currentTextEl) {
+            this.currentTextEl = document.createElement('div');
+            this.currentTextEl.className = 'text';
+            this.contentEl.appendChild(this.currentTextEl);
+          }
+          this.currentTextEl.innerHTML = html;
         }
-        this.currentTextEl.innerHTML = html;
       }
 
       _renderCard(card) {
+        if (this.cardPreviewEl) {
+          this.cardPreviewEl.remove();
+          this.cardPreviewEl = null;
+        }
+
+        if (card.type === 'submit') {
+          const btn = document.createElement('button');
+          btn.className = 'btn-submit';
+          btn.textContent = card.attrs.label || '提交';
+          btn.addEventListener('click', () => this._handleSubmit(card));
+          this.contentEl.appendChild(btn);
+          this.state = UI_STATE.WAITING_USER;
+          return;
+        }
+
         const data = Renderer.extractData(card);
         const el = document.createElement('div');
         el.className = `card card-${card.type}`;
@@ -443,15 +471,6 @@
               </div>`;
             break;
 
-          case 'submit':
-            const btn = document.createElement('button');
-            btn.className = 'btn-submit';
-            btn.textContent = card.attrs.label || '提交';
-            btn.addEventListener('click', () => this._handleSubmit(card));
-            this.contentEl.appendChild(btn);
-            this.state = UI_STATE.WAITING_USER;
-            return;
-
           default:
             el.innerHTML = `<p>${card.lines.join('<br>')}</p>`;
             break;
@@ -461,7 +480,7 @@
       }
 
       _handleSubmit(card) {
-        const { valid, errors } = this.collector.build(card.id, parser.pendingCards);
+        const { valid, errors } = this.collector.build(card.id, this.parser.pendingCards);
         if (!valid) {
           alert(`请完成所有必填项：${errors.join(', ')}`);
           return;
@@ -476,6 +495,8 @@
         this.state = UI_STATE.STREAMING;
         this.textBuffer = '';
         this.currentTextEl = null;
+        this.cardPreviewEl = null;
+        this.cardPreviewBuffer = '';
         this.collector.reset();
 
         this._createMessage();
@@ -483,12 +504,16 @@
         cursor.className = 'cursor';
         this.contentEl.appendChild(cursor);
 
-        const parser = new Parser({
-          onText: (buffer) => {
-            this.textBuffer = buffer;
+        this.parser = new Parser({
+          onText: (buffer, inCard) => {
+            if (inCard) {
+              this.cardPreviewBuffer = buffer;
+            } else {
+              this.textBuffer = buffer;
+            }
             if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
             this.pendingRender = requestAnimationFrame(() => {
-              this._renderText();
+              this._renderText(inCard ? this.cardPreviewBuffer : this.textBuffer, inCard);
               this.pendingRender = null;
             });
           },
@@ -496,7 +521,11 @@
             this._renderCard(card);
           },
           onStateChange: (from, to) => {
-            console.log(`[XIUI] state: ${from} -> ${to}`);
+            if (to === Parser.STATE.CARD) {
+              this.cardPreviewBuffer = '';
+            } else if (to === Parser.STATE.IDLE && from === Parser.STATE.CARD) {
+              this.cardPreviewBuffer = '';
+            }
           }
         });
 
@@ -506,12 +535,13 @@
 
         const typeNext = () => {
           if (charIndex >= fullText.length) {
-            parser.flush();
-            this._renderText();
+            this.parser.flush();
+            if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
+            this._renderText(this.textBuffer, false);
             cursor.remove();
             return;
           }
-          parser.feedChar(fullText[charIndex]);
+          this.parser.feedChar(fullText[charIndex]);
           charIndex++;
           output.scrollTop = output.scrollHeight;
           setTimeout(typeNext, typeSpeed);

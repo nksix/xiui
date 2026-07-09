@@ -40,16 +40,24 @@ export class Parser {
       if (this.state === Parser.STATE.IDLE) {
         if (!line.startsWith('<!--')) {
           this.textBuffer += line + '\n';
-          this.emitter.onText(this.textBuffer);
+          this.emitter.onText(this.textBuffer, false);
         }
       } else {
-        this.cardBuffer += line + '\n';
+        if (!line.startsWith('<!--')) {
+          this.cardBuffer += line + '\n';
+          this.emitter.onText(this.cardBuffer, true);
+        }
       }
     } else {
       if (this.state === Parser.STATE.IDLE) {
         if (!this.lineBuffer.startsWith('<')) {
           const preview = this.textBuffer + this.lineBuffer;
-          this.emitter.onText(preview);
+          this.emitter.onText(preview, false);
+        }
+      } else {
+        if (!this.lineBuffer.startsWith('<')) {
+          const preview = this.cardBuffer + this.lineBuffer;
+          this.emitter.onText(preview, true);
         }
       }
     }
