@@ -18,6 +18,9 @@ export class Renderer {
   /** 检测到 submit 卡片 */
   onSubmitCard(card) {}
 
+  /** 字符级别回调（流式传输场景） */
+  onChar(char, lineBuffer, inCard) {}
+
   /**
    * 从 Markdown 内容中提取卡片结构化数据
    */

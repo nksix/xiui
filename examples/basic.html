@@ -397,6 +397,8 @@
         this.inCard = false;
         this.currentCardContainer = null;
         this.cardLines = [];
+        this.currentLineEl = null;
+        this.currentCardLineEl = null;
       }
 
       _createMessage() {
@@ -409,6 +411,10 @@
 
       _flushMarkdown() {
         if (this.markdownBuffer.length === 0) return;
+        if (this.currentLineEl) {
+          this.currentLineEl.remove();
+          this.currentLineEl = null;
+        }
         const md = this.markdownBuffer.join('\n');
         if (!md.trim()) {
           this.markdownBuffer = [];
@@ -432,6 +438,10 @@
       }
 
       onCardStart(type, id) {
+        if (this.currentLineEl) {
+          this.currentLineEl.remove();
+          this.currentLineEl = null;
+        }
         this._flushMarkdown();
         this.inCard = true;
         this.cardLines = [];
@@ -460,8 +470,27 @@
         this.currentCardContainer.appendChild(div);
       }
 
+      onChar(char, lineBuffer, inCard) {
+        if (inCard) {
+          if (!this.currentCardLineEl) {
+            this.currentCardLineEl = document.createElement('div');
+            this.currentCardLineEl.className = 'card-line';
+            this.currentCardContainer.appendChild(this.currentCardLineEl);
+          }
+          this.currentCardLineEl.textContent = lineBuffer;
+        } else {
+          if (!this.currentLineEl) {
+            this.currentLineEl = document.createElement('div');
+            this.currentLineEl.className = 'streaming-text';
+            this.contentEl.appendChild(this.currentLineEl);
+          }
+          this.currentLineEl.textContent = lineBuffer;
+        }
+      }
+
       onCardEnd(card, lines) {
         this.inCard = false;
+        this.currentCardLineEl = null;
         
         if (card.type === 'submit') {
           if (this.currentCardContainer) {

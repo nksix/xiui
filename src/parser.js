@@ -23,6 +23,8 @@ export class Parser {
       const line = this.lineBuffer.slice(0, -1);
       this.lineBuffer = '';
       this._processLine(line);
+    } else {
+      this.renderer.onChar(char, this.lineBuffer, this.inCard);
     }
   }
 
