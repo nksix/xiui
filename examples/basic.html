@@ -494,13 +494,20 @@
       }
 
       onChar(char, lineBuffer, inCard) {
+        if (lineBuffer.startsWith('<!--')) {
+          return;
+        }
         if (inCard) {
           if (!this.currentCardLineEl) {
             this.currentCardLineEl = document.createElement('div');
             this.currentCardLineEl.className = 'card-line';
-            this.currentCardContainer.appendChild(this.currentCardLineEl);
+            if (this.currentCardContainer) {
+              this.currentCardContainer.appendChild(this.currentCardLineEl);
+            }
           }
-          this.currentCardLineEl.textContent = lineBuffer;
+          if (this.currentCardLineEl) {
+            this.currentCardLineEl.textContent = lineBuffer;
+          }
         } else {
           if (!this.currentLineEl) {
             this.currentLineEl = document.createElement('div');
@@ -544,6 +551,10 @@
 
       onMarkdownLine(line) {
         if (!this.inCard) {
+          if (this.currentLineEl) {
+            this.currentLineEl.remove();
+            this.currentLineEl = null;
+          }
           if (line.trim()) {
             let html = marked.parse(line);
             html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
@@ -558,12 +569,7 @@
             const div = document.createElement('div');
             div.className = 'text';
             div.innerHTML = html;
-            if (this.currentLineEl) {
-              this.contentEl.replaceChild(div, this.currentLineEl);
-            } else {
-              this.contentEl.appendChild(div);
-            }
-            this.currentLineEl = null;
+            this.contentEl.appendChild(div);
           }
         }
       }
