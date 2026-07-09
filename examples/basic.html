@@ -358,6 +358,15 @@
 
       onCardEnd(card, lines) {
         this.inCard = false;
+        
+        if (card.type === 'submit') {
+          if (this.currentCardContainer) {
+            this.currentCardContainer.remove();
+            this.currentCardContainer = null;
+          }
+          return;
+        }
+
         const data = Renderer.extractData(card, lines);
         const el = this._createCardElement(card, data);
         
