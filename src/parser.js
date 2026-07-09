@@ -1,35 +1,57 @@
 export class Parser {
   static STATE = {
     IDLE: 'idle',
-    TEXT: 'text',
-    CARD: 'card',
-    COMMENT: 'comment'
+    CARD: 'card'
   };
 
   constructor(emitter) {
     this.emitter = emitter;
     this.state = Parser.STATE.IDLE;
     this.textBuffer = '';
+    this.lineBuffer = '';
     this.cardBuffer = '';
     this.currentCard = null;
     this.pendingCards = [];
-    this.commentBuffer = '';
   }
 
   feedChar(char) {
-    switch (this.state) {
-      case Parser.STATE.IDLE:
-        this._handleIdle(char);
-        break;
-      case Parser.STATE.TEXT:
-        this._handleText(char);
-        break;
-      case Parser.STATE.CARD:
-        this._handleCard(char);
-        break;
-      case Parser.STATE.COMMENT:
-        this._handleComment(char);
-        break;
+    this.lineBuffer += char;
+
+    if (char === '\n') {
+      const line = this.lineBuffer.slice(0, -1);
+      this.lineBuffer = '';
+
+      const cardStartMatch = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
+      const cardEndMatch = line === '<!-- /card -->';
+
+      if (cardStartMatch) {
+        const [, type, id, attrStr] = cardStartMatch;
+        this.currentCard = { type, id, attrs: this._parseAttrs(attrStr) };
+        this.cardBuffer = '';
+        this._transition(Parser.STATE.CARD);
+        return;
+      }
+
+      if (cardEndMatch) {
+        this._finalizeCard();
+        return;
+      }
+
+      if (this.state === Parser.STATE.IDLE) {
+        if (!line.startsWith('<!--')) {
+          this.textBuffer += line + '\n';
+          this.emitter.onText(this.textBuffer);
+        }
+      } else {
+        this.cardBuffer += line + '\n';
+      }
+    } else {
+      if (this.state === Parser.STATE.IDLE) {
+        if (!this.lineBuffer.startsWith('<')) {
+          const preview = this.textBuffer + this.lineBuffer;
+          this.emitter.onText(preview);
+        }
+      }
     }
   }
 
@@ -39,11 +61,24 @@ export class Parser {
   }
 
   flush() {
-    if (this.state === Parser.STATE.TEXT && this.textBuffer) {
-      this.emitter.onText(this.textBuffer);
-    }
-    if (this.state === Parser.STATE.CARD && this.cardBuffer) {
-      this._finalizeCard();
+    if (this.lineBuffer) {
+      const line = this.lineBuffer;
+      this.lineBuffer = '';
+
+      if (line === '<!-- /card -->') {
+        this._finalizeCard();
+        return;
+      }
+
+      if (this.state === Parser.STATE.IDLE) {
+        if (!line.startsWith('<!--')) {
+          this.textBuffer += line;
+          this.emitter.onText(this.textBuffer);
+        }
+      } else {
+        this.cardBuffer += line;
+        this._finalizeCard();
+      }
     }
     this.state = Parser.STATE.IDLE;
   }
@@ -51,70 +86,10 @@ export class Parser {
   reset() {
     this.state = Parser.STATE.IDLE;
     this.textBuffer = '';
+    this.lineBuffer = '';
     this.cardBuffer = '';
     this.currentCard = null;
     this.pendingCards = [];
-    this.commentBuffer = '';
-  }
-
-  _handleIdle(char) {
-    if (char === '<') {
-      this.commentBuffer = '<';
-      this._transition(Parser.STATE.COMMENT);
-    } else {
-      this.textBuffer = char;
-      this._transition(Parser.STATE.TEXT);
-      this.emitter.onText(this.textBuffer);
-    }
-  }
-
-  _handleText(char) {
-    if (char === '<') {
-      this.commentBuffer = '<';
-      this._transition(Parser.STATE.COMMENT);
-    } else {
-      this.textBuffer += char;
-      this.emitter.onText(this.textBuffer);
-    }
-  }
-
-  _handleCard(char) {
-    if (char === '<') {
-      this.commentBuffer = '<';
-      this._transition(Parser.STATE.COMMENT);
-    } else {
-      this.cardBuffer += char;
-    }
-  }
-
-  _handleComment(char) {
-    this.commentBuffer += char;
-
-    if (this.commentBuffer.endsWith('<!--')) {
-      const line = this.commentBuffer.slice(0, -4).trim();
-      if (line) {
-        this.textBuffer += line;
-        this.emitter.onText(this.textBuffer);
-      }
-    }
-
-    if (this.commentBuffer.endsWith('-->')) {
-      const comment = this.commentBuffer.slice(4, -3).trim();
-      const cardStartMatch = comment.match(/^card:([^:]+):(\w+)(?:\[@(.+)\])?$/);
-      const cardEndMatch = comment.match(/^\/card$/);
-
-      if (cardEndMatch && this.currentCard) {
-        this._finalizeCard();
-      } else if (cardStartMatch) {
-        const [, tag, id, attrStr] = cardStartMatch;
-        this.currentCard = { type: tag, id, attrs: this._parseAttrs(attrStr) };
-        this.cardBuffer = '';
-        this._transition(Parser.STATE.CARD);
-      } else {
-        this._transition(Parser.STATE.IDLE);
-      }
-      this.commentBuffer = '';
-    }
   }
 
   _finalizeCard() {
