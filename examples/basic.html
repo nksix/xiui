@@ -351,7 +351,8 @@
     const UI_STATE = {
       IDLE: 'idle',
       STREAMING: 'streaming',
-      WAITING_USER: 'waiting_user'
+      WAITING_USER: 'waiting_user',
+      SUBMITTED: 'submitted'
     };
 
     class XIUIApp {
@@ -360,6 +361,7 @@
         this.collector = new Collector();
         this.textBuffer = '';
         this.contentEl = null;
+        this.streaming = false;
         this.currentTextEl = null;
         this.cardPreviewEl = null;
         this.cardPreviewBuffer = '';
@@ -487,10 +489,32 @@
         }
         alert('提交成功！');
         this.collector.reset();
-        this.state = UI_STATE.IDLE;
+        this.state = UI_STATE.SUBMITTED;
+        this._disableAllCards();
+      }
+
+      _disableAllCards() {
+        this.contentEl.querySelectorAll('.option').forEach(opt => {
+          opt.style.pointerEvents = 'none';
+          opt.style.opacity = '0.5';
+        });
+        this.contentEl.querySelectorAll('.card-input').forEach(input => {
+          input.disabled = true;
+          input.style.opacity = '0.5';
+        });
+        this.contentEl.querySelectorAll('.btn-submit').forEach(btn => {
+          btn.disabled = true;
+          btn.style.opacity = '0.5';
+        });
+        this.contentEl.querySelectorAll('.btn-confirm, .btn-cancel').forEach(btn => {
+          btn.disabled = true;
+          btn.style.opacity = '0.5';
+        });
       }
 
       startStreaming(response) {
+        if (this.streaming) return;
+        this.streaming = true;
         output.innerHTML = '';
         this.state = UI_STATE.STREAMING;
         this.textBuffer = '';
@@ -511,11 +535,7 @@
             } else {
               this.textBuffer = buffer;
             }
-            if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
-            this.pendingRender = requestAnimationFrame(() => {
-              this._renderText(inCard ? this.cardPreviewBuffer : this.textBuffer, inCard);
-              this.pendingRender = null;
-            });
+            this._renderText(inCard ? this.cardPreviewBuffer : this.textBuffer, inCard);
           },
           onCard: (card) => {
             this._renderCard(card);
@@ -539,6 +559,7 @@
             if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
             this._renderText(this.textBuffer, false);
             cursor.remove();
+            this.streaming = false;
             return;
           }
           this.parser.feedChar(fullText[charIndex]);

@@ -53,6 +53,8 @@ export class Parser {
         if (!this.lineBuffer.startsWith('<')) {
           const preview = this.textBuffer + this.lineBuffer;
           this.emitter.onText(preview, false);
+        } else {
+          console.log('Skipping line starting with <:', this.lineBuffer);
         }
       } else {
         if (!this.lineBuffer.startsWith('<')) {
