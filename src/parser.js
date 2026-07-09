@@ -10,6 +10,11 @@ export class Parser {
     this.renderer = renderer;
     this.inCard = false;
     this.lineBuffer = '';      // 当前行缓冲区（字符累积）
+    this.textBuffer = '';      // 已确认的文本缓冲区
+  }
+
+  _isCommentStart(line) {
+    return line.startsWith('<');
   }
 
   /**
@@ -22,9 +27,46 @@ export class Parser {
     if (char === '\n') {
       const line = this.lineBuffer.slice(0, -1);
       this.lineBuffer = '';
-      this._processLine(line);
+      
+      const start = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
+      if (start) {
+        const [, type, id, attrStr] = start;
+        this.stack.push({ type, id, attrs: this._parseAttrs(attrStr) });
+        this.buffer = [];
+        this.inCard = true;
+        this.renderer.onCardStart(type, id);
+        return;
+      }
+
+      if (line === '<!-- /card -->') {
+        const card = this.stack.pop();
+        this.renderer.onCardEnd(card, [...this.buffer]);
+        this.buffer = [];
+        this.inCard = this.stack.length > 0;
+
+        if (['choice', 'input', 'confirm'].includes(card.type)) {
+          this.pendingCards.push(card);
+        }
+        if (card.type === 'submit') {
+          this.renderer.onSubmitCard(card);
+        }
+        return;
+      }
+
+      if (this.inCard) {
+        this.buffer.push(line);
+        this.renderer.onCardLine(this.stack[this.stack.length - 1], line);
+      } else {
+        if (!line.startsWith('<!--')) {
+          this.textBuffer += line + '\n';
+          this.renderer.onChar(char, this.textBuffer, false);
+        }
+      }
     } else {
-      this.renderer.onChar(char, this.lineBuffer, this.inCard);
+      if (!this.inCard && !this._isCommentStart(this.lineBuffer)) {
+        const previewBuffer = this.textBuffer + this.lineBuffer;
+        this.renderer.onChar(char, previewBuffer, false);
+      }
     }
   }
 
@@ -33,7 +75,8 @@ export class Parser {
    * @param {string} line
    */
   feed(line) {
-    this._processLine(line);
+    line.split('').forEach(char => this.feedChar(char));
+    this.feedChar('\n');
   }
 
   /**
@@ -41,47 +84,31 @@ export class Parser {
    */
   flush() {
     if (this.lineBuffer) {
-      this._processLine(this.lineBuffer);
+      const line = this.lineBuffer;
       this.lineBuffer = '';
-    }
-  }
+      
+      if (line === '<!-- /card -->' && this.stack.length > 0) {
+        const card = this.stack.pop();
+        this.renderer.onCardEnd(card, [...this.buffer]);
+        this.buffer = [];
+        this.inCard = this.stack.length > 0;
 
-  /**
-   * 处理一行文本
-   * @param {string} line
-   */
-  _processLine(line) {
-    const start = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
-    if (start) {
-      const [, type, id, attrStr] = start;
-      this.stack.push({ type, id, attrs: this._parseAttrs(attrStr) });
-      this.buffer = [];
-      this.inCard = true;
-      this.renderer.onCardStart(type, id);
-      return;
-    }
-
-    if (line === '<!-- /card -->') {
-      const card = this.stack.pop();
-      this.renderer.onCardEnd(card, [...this.buffer]);
-      this.buffer = [];
-      this.inCard = this.stack.length > 0;
-
-      if (['choice', 'input', 'confirm'].includes(card.type)) {
-        this.pendingCards.push(card);
+        if (['choice', 'input', 'confirm'].includes(card.type)) {
+          this.pendingCards.push(card);
+        }
+        if (card.type === 'submit') {
+          this.renderer.onSubmitCard(card);
+        }
+        return;
       }
-      if (card.type === 'submit') {
-        this.renderer.onSubmitCard(card);
+      
+      if (this.inCard) {
+        this.buffer.push(line);
+        this.renderer.onCardLine(this.stack[this.stack.length - 1], line);
+      } else {
+        this.textBuffer += line;
+        this.renderer.onChar('', this.textBuffer, false);
       }
-      return;
-    }
-
-    this.buffer.push(line);
-
-    if (this.inCard) {
-      this.renderer.onCardLine(this.stack[this.stack.length - 1], line);
-    } else {
-      this.renderer.onMarkdownLine(line);
     }
   }
 

@@ -393,12 +393,12 @@
         super();
         this.messageEl = null;
         this.contentEl = null;
-        this.markdownBuffer = [];
+        this.textBuffer = '';
         this.inCard = false;
         this.currentCardContainer = null;
         this.cardLines = [];
-        this.currentLineEl = null;
-        this.currentCardLineEl = null;
+        this.currentTextEl = null;
+        this.pendingRender = null;
       }
 
       _createMessage() {
@@ -409,14 +409,9 @@
         this.contentEl = this.messageEl.querySelector('.content');
       }
 
-      _flushMarkdown() {
-        if (this.markdownBuffer.length === 0) return;
-        const md = this.markdownBuffer.join('\n');
-        if (!md.trim()) {
-          this.markdownBuffer = [];
-          return;
-        }
-        let html = marked.parse(md);
+      _renderTextBuffer() {
+        if (!this.textBuffer.trim()) return;
+        let html = marked.parse(this.textBuffer);
         html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
           try {
             const span = document.createElement('span');
@@ -426,46 +421,15 @@
             return `<code>${formula}</code>`;
           }
         });
-        const div = document.createElement('div');
-        div.className = 'text';
-        div.innerHTML = html;
-        if (this.currentLineEl) {
-          this.contentEl.replaceChild(div, this.currentLineEl);
-        } else {
-          this.contentEl.appendChild(div);
+        if (!this.currentTextEl) {
+          this.currentTextEl = document.createElement('div');
+          this.currentTextEl.className = 'text';
+          this.contentEl.appendChild(this.currentTextEl);
         }
-        this.currentLineEl = null;
-        this.markdownBuffer = [];
-      }
-
-      _renderLine(line) {
-        let html = marked.parse(line);
-        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
-          try {
-            const span = document.createElement('span');
-            katex.render(formula.trim(), span, { throwOnError: false });
-            return span.innerHTML;
-          } catch (e) {
-            return `<code>${formula}</code>`;
-          }
-        });
-        const div = document.createElement('div');
-        div.className = 'text';
-        div.innerHTML = html;
-        if (this.currentLineEl) {
-          this.contentEl.replaceChild(div, this.currentLineEl);
-        } else {
-          this.contentEl.appendChild(div);
-        }
-        this.currentLineEl = null;
+        this.currentTextEl.innerHTML = html;
       }
 
       onCardStart(type, id) {
-        if (this.currentLineEl) {
-          this.currentLineEl.remove();
-          this.currentLineEl = null;
-        }
-        this._flushMarkdown();
         this.inCard = true;
         this.cardLines = [];
         this.currentCardContainer = document.createElement('div');
@@ -493,34 +457,22 @@
         this.currentCardContainer.appendChild(div);
       }
 
-      onChar(char, lineBuffer, inCard) {
-        if (lineBuffer.startsWith('<!--')) {
+      onChar(char, textBuffer, inCard) {
+        if (inCard) {
           return;
         }
-        if (inCard) {
-          if (!this.currentCardLineEl) {
-            this.currentCardLineEl = document.createElement('div');
-            this.currentCardLineEl.className = 'card-line';
-            if (this.currentCardContainer) {
-              this.currentCardContainer.appendChild(this.currentCardLineEl);
-            }
-          }
-          if (this.currentCardLineEl) {
-            this.currentCardLineEl.textContent = lineBuffer;
-          }
-        } else {
-          if (!this.currentLineEl) {
-            this.currentLineEl = document.createElement('div');
-            this.currentLineEl.className = 'streaming-text';
-            this.contentEl.appendChild(this.currentLineEl);
-          }
-          this.currentLineEl.textContent = lineBuffer;
+        this.textBuffer = textBuffer;
+        if (this.pendingRender) {
+          cancelAnimationFrame(this.pendingRender);
         }
+        this.pendingRender = requestAnimationFrame(() => {
+          this._renderTextBuffer();
+          this.pendingRender = null;
+        });
       }
 
       onCardEnd(card, lines) {
         this.inCard = false;
-        this.currentCardLineEl = null;
         
         if (card.type === 'submit') {
           if (this.currentCardContainer) {
@@ -549,33 +501,7 @@
         }
       }
 
-      onMarkdownLine(line) {
-        if (!this.inCard) {
-          if (this.currentLineEl) {
-            this.currentLineEl.remove();
-            this.currentLineEl = null;
-          }
-          if (line.trim()) {
-            let html = marked.parse(line);
-            html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
-              try {
-                const span = document.createElement('span');
-                katex.render(formula.trim(), span, { throwOnError: false });
-                return span.innerHTML;
-              } catch (e) {
-                return `<code>${formula}</code>`;
-              }
-            });
-            const div = document.createElement('div');
-            div.className = 'text';
-            div.innerHTML = html;
-            this.contentEl.appendChild(div);
-          }
-        }
-      }
-
       onSubmitCard(card) {
-        this._flushMarkdown();
         const btn = document.createElement('button');
         btn.textContent = card.attrs.label || '提交';
         btn.style.cssText = 'background:linear-gradient(135deg,#667eea,#7c3aed);color:white;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:15px;font-weight:500;margin:12px 0;transition:all 0.2s ease;';
@@ -805,7 +731,7 @@
       function typeNext() {
         if (charIndex >= fullText.length) {
           parser.flush();
-          renderer._flushMarkdown();
+          renderer._renderTextBuffer();
           cursor.remove();
           return;
         }
