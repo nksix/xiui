@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>XIUI 基础示例</title>
+  <style>
+    body { font-family: system-ui; max-width: 700px; margin: 40px auto; }
+    .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .card-choice .option { display: block; padding: 8px 12px; margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; }
+    .card-choice .option:hover { background: #f0f4ff; }
+    .card-choice .option.selected { background: #e0e8ff; border-color: #667eea; }
+    .card-tip { background: #f8f9ff; border-left: 4px solid #667eea; }
+    .card-input input, .card-input textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .card-submit button { background: #667eea; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; }
+    .card-progress .bar { height: 8px; background: #e0e0e0; border-radius: 4px; margin: 8px 0; }
+    .card-progress .fill { height: 100%; background: #667eea; border-radius: 4px; }
+    .card-summary { display: inline-block; min-width: 120px; text-align: center; }
+    .card-summary .value { font-size: 24px; font-weight: bold; }
+    .card-confirm button { margin: 4px; padding: 8px 20px; border-radius: 6px; cursor: pointer; }
+    .skeleton { height: 60px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    #output { margin: 20px 0; }
+    #input-area { display: flex; gap: 8px; margin-top: 20px; }
+    #input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+    #input-area button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>XIUI 基础示例</h1>
+  <div id="output"></div>
+  <div id="input-area">
+    <input type="text" id="user-input" placeholder="输入消息..." />
+    <button onclick="sendMessage()">发送</button>
+  </div>
+
+  <script type="module">
+    import { Parser, Renderer, Collector } from '../src/index.js';
+
+    class DOMRenderer extends Renderer {
+      constructor(outputEl) {
+        super();
+        this.output = outputEl;
+        this.currentSkeleton = null;
+      }
+
+      onCardStart(type, id) {
+        this.currentSkeleton = document.createElement('div');
+        this.currentSkeleton.className = 'skeleton';
+        this.currentSkeleton.id = `skeleton-${id}`;
+        this.output.appendChild(this.currentSkeleton);
+      }
+
+      onCardEnd(card, lines) {
+        const data = Renderer.extractData(card, lines);
+        const el = this._createCardElement(card, data);
+        
+        if (this.currentSkeleton) {
+          this.currentSkeleton.replaceWith(el);
+          this.currentSkeleton = null;
+        } else {
+          this.output.appendChild(el);
+        }
+
+        // 绑定交互
+        if (card.type === 'choice') {
+          el.querySelectorAll('.option').forEach(opt => {
+            opt.addEventListener('click', () => {
+              el.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+              opt.classList.add('selected');
+              collector.onChoiceSelect(card.id, opt.dataset.id);
+            });
+          });
+        } else if (card.type === 'input') {
+          const input = el.querySelector('input, textarea');
+          input?.addEventListener('input', (e) => {
+            collector.onInput(card.id, e.target.value);
+          });
+        } else if (card.type === 'confirm') {
+          el.querySelector('.btn-yes')?.addEventListener('click', () => collector.onConfirm(card.id, 'yes'));
+          el.querySelector('.btn-no')?.addEventListener('click', () => collector.onConfirm(card.id, 'no'));
+        }
+      }
+
+      onMarkdownLine(line) {
+        if (!line.trim()) return;
+        const p = document.createElement('p');
+        p.textContent = line;
+        this.output.appendChild(p);
+      }
+
+      onSubmitCard(card) {
+        const btn = document.createElement('button');
+        btn.textContent = card.attrs.label || '提交';
+        btn.style.cssText = 'background:#667eea;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;margin:8px 0;';
+        btn.addEventListener('click', () => {
+          const { valid, errors } = collector.build(card.id, parser.pendingCards);
+          if (!valid) {
+            alert(`请完成所有必填项：${errors.join(', ')}`);
+            return;
+          }
+          alert('提交成功！查看控制台获取事件 JSON');
+          console.log('Submit event:', collector.build(card.id, parser.pendingCards));
+        });
+        this.output.appendChild(btn);
+      }
+
+      _createCardElement(card, data) {
+        const el = document.createElement('div');
+        el.className = `card card-${card.type}`;
+
+        switch (card.type) {
+          case 'choice':
+            el.innerHTML = `<p><strong>${data.question}</strong></p>
+              ${data.options.map(o => `<span class="option" data-id="${o.id}">${o.id}. ${o.label}</span>`).join('')}`;
+            break;
+          case 'tip':
+            el.innerHTML = data.body.replace(/\n/g, '<br>');
+            break;
+          case 'input':
+            el.innerHTML = `<p>${data.title}</p>
+              <${card.attrs.type === 'multiline' ? 'textarea' : 'input'} placeholder="${data.placeholder}">`;
+            break;
+          case 'progress':
+            el.innerHTML = `<p><strong>${data.title}</strong> ${data.label}</p>
+              <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
+            break;
+          case 'summary':
+            el.innerHTML = `<div class="value">${data.value}</div>
+              <small>${data.title}</small>
+              ${data.subtitle ? `<br><small>${data.subtitle}</small>` : ''}`;
+            break;
+          case 'confirm':
+            el.innerHTML = `<p><strong>${data.title}</strong></p>
+              <p>${data.description}</p>
+              <button class="btn-yes">${data.confirmLabel}</button>
+              <button class="btn-no">${data.cancelLabel}</button>`;
+            break;
+        }
+
+        return el;
+      }
+    }
+
+    // 初始化
+    const output = document.getElementById('output');
+    const renderer = new DOMRenderer(output);
+    const parser = new Parser(renderer);
+    const collector = new Collector();
+    window.parser = parser;
+    window.collector = collector;
+
+    // 模拟模型输出
+    const demoResponse = [
+      '今天我们来学习 Python 的可变类型和不可变类型。',
+      '',
+      '<!-- card:choice:c1 -->',
+      '下面哪个是可变类型？',
+      '- A. 整数 int',
+      '- B. 字符串 str',
+      '- C. 列表 list',
+      '- D. 元组 tuple',
+      '<!-- /card -->',
+      '',
+      '<!-- card:submit:s1 -->',
+      '提交',
+      '<!-- /card -->',
+    ];
+
+    let lineIndex = 0;
+    const interval = setInterval(() => {
+      if (lineIndex >= demoResponse.length) {
+        clearInterval(interval);
+        return;
+      }
+      parser.feed(demoResponse[lineIndex]);
+      lineIndex++;
+    }, 200);
+
+    // 用户输入
+    window.sendMessage = function() {
+      const input = document.getElementById('user-input');
+      const text = input.value.trim();
+      if (!text) return;
+      
+      const p = document.createElement('p');
+      p.innerHTML = `<strong>你：</strong>${text}`;
+      output.appendChild(p);
+      input.value = '';
+    };
+  </script>
+</body>
+</html>

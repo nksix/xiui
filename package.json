@@ -1,0 +1,30 @@
+{
+  "name": "xiui",
+  "version": "1.0.0",
+  "description": "Xuanhua Interactive User Interface — 生成式可交互 UI 协议",
+  "main": "src/index.js",
+  "type": "module",
+  "files": [
+    "src/",
+    "spec/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "xiui",
+    "a2ui",
+    "agent",
+    "ui",
+    "card",
+    "markdown",
+    "streaming",
+    "interactive",
+    "ai",
+    "llm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xuanhua-inc/xiui"
+  }
+}
