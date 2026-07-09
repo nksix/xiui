@@ -273,18 +273,8 @@
       box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
-    #input-area {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-      padding: 16px;
-      background: var(--bg-secondary);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-    }
-
-    #input-area input {
-      flex: 1;
+    .card-input {
+      width: 100%;
       padding: 12px 16px;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -294,24 +284,63 @@
       outline: none;
     }
 
-    #input-area input:focus { border-color: var(--accent); }
-    #input-area input::placeholder { color: var(--text-secondary); }
+    .card-input:focus { border-color: var(--accent); }
+    .card-input::placeholder { color: var(--text-secondary); }
 
-    #input-area button {
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .summary-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .confirm-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn-confirm {
+      flex: 1;
       padding: 12px 24px;
       background: linear-gradient(135deg, var(--accent), #7c3aed);
       color: white;
       border: none;
-      border-radius: 12px;
+      border-radius: 10px;
       cursor: pointer;
       font-size: 15px;
       font-weight: 500;
       transition: all 0.2s ease;
     }
 
-    #input-area button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    .btn-cancel {
+      flex: 1;
+      padding: 12px 24px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .btn-confirm:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-cancel:hover {
+      background: var(--bg-secondary);
+      border-color: var(--accent);
     }
 
     .cursor {
@@ -351,10 +380,6 @@
     </div>
     
     <div id="output"></div>
-    <div id="input-area">
-      <input type="text" id="user-input" placeholder="输入消息..." />
-      <button onclick="sendMessage()">发送</button>
-    </div>
   </div>
 
   <script type="module">
@@ -447,7 +472,7 @@
         }
 
         const data = Renderer.extractData(card, lines);
-        const el = this._createCardElement(card, data);
+        const el = this._createCardElement(card, data, lines);
         
         if (this.currentCardContainer) {
           this.currentCardContainer.replaceWith(el);
@@ -487,7 +512,7 @@
         this.contentEl.appendChild(btn);
       }
 
-      _createCardElement(card, data) {
+      _createCardElement(card, data, lines) {
         const el = document.createElement('div');
         el.className = `card card-${card.type}`;
 
@@ -502,6 +527,29 @@
           case 'progress':
             el.innerHTML = `<p><strong>${data.title}</strong> ${data.label}</p>
               <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
+            break;
+          case 'input':
+            el.innerHTML = `<p><strong>${data.title}</strong></p>
+              <input type="text" class="card-input" placeholder="${data.placeholder || ''}" data-card-id="${card.id}">`;
+            break;
+          case 'summary':
+            const summaryRows = lines.filter(l => l.startsWith('|'));
+            const summaryHtml = summaryRows.map(row => {
+              const cells = row.split('|').filter(Boolean).map(c => `<td>${c.trim()}</td>`).join('');
+              return `<tr>${cells}</tr>`;
+            }).join('');
+            el.innerHTML = `<table class="summary-table">${summaryHtml}</table>`;
+            break;
+          case 'confirm':
+            el.innerHTML = `<p><strong>${data.title}</strong></p>
+              <p>${data.description}</p>
+              <div class="confirm-buttons">
+                <button class="btn-confirm">${data.confirmLabel || '确认'}</button>
+                <button class="btn-cancel">${data.cancelLabel || '取消'}</button>
+              </div>`;
+            break;
+          default:
+            el.innerHTML = `<p>${lines.join('<br>')}</p>`;
             break;
         }
 
@@ -710,18 +758,6 @@
       if (datasets[key]) {
         startStreaming(datasets[key]);
       }
-    };
-
-    window.sendMessage = function() {
-      const input = document.getElementById('user-input');
-      const text = input.value.trim();
-      if (!text) return;
-      
-      const message = document.createElement('div');
-      message.className = 'message user';
-      message.innerHTML = '<div class="avatar">👤</div><div class="content"><div class="text">' + text + '</div></div>';
-      output.appendChild(message);
-      input.value = '';
     };
 
     startStreaming(datasets.basic);
