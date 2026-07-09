@@ -135,14 +135,6 @@
       border-radius: 0 16px 16px 16px;
     }
 
-    .message.user .text {
-      background: var(--accent);
-      color: white;
-      border-radius: 16px 0 16px 16px;
-      margin-left: auto;
-      max-width: 80%;
-    }
-
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -181,23 +173,6 @@
       padding-left: 20px;
     }
 
-    .card-submit button {
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-      border: none;
-      padding: 12px 32px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-
-    .card-submit button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    }
-
     .card-progress .bar {
       height: 8px;
       background: var(--bg-secondary);
@@ -211,66 +186,6 @@
       background: linear-gradient(90deg, var(--accent), #7c3aed);
       border-radius: 4px;
       transition: width 0.5s ease;
-    }
-
-    .card-preview {
-      background: var(--card-bg);
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin: 12px 0;
-      transition: all 0.3s ease;
-    }
-
-    .card-preview .card-line {
-      line-height: 1.6;
-      margin-bottom: 4px;
-      opacity: 0.8;
-    }
-
-    #dataset-selector {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      background: var(--bg-secondary);
-      border-radius: 12px;
-      margin-bottom: 20px;
-      border: 1px solid var(--border);
-    }
-
-    #dataset-selector label {
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
-
-    #dataset-selector select {
-      flex: 1;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 14px;
-      outline: none;
-    }
-
-    #dataset-selector select:focus { border-color: var(--accent); }
-
-    #dataset-selector button {
-      padding: 8px 20px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s ease;
-    }
-
-    #dataset-selector button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
     .card-input {
@@ -333,7 +248,20 @@
       transition: all 0.2s ease;
     }
 
-    .btn-confirm:hover {
+    .btn-submit {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      margin: 12px 0;
+    }
+
+    .btn-submit:hover, .btn-confirm:hover {
       transform: translateY(-1px);
       box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
@@ -355,6 +283,39 @@
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0; }
+    }
+
+    #dataset-selector {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    #dataset-selector label { font-size: 14px; color: var(--text-secondary); }
+    #dataset-selector select {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+    }
+    #dataset-selector select:focus { border-color: var(--accent); }
+    #dataset-selector button {
+      padding: 8px 20px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -386,30 +347,32 @@
     import { Parser, Renderer, Collector } from '../src/index.js';
 
     const output = document.getElementById('output');
-    const collector = new Collector();
 
-    class DOMRenderer extends Renderer {
+    const UI_STATE = {
+      IDLE: 'idle',
+      STREAMING: 'streaming',
+      WAITING_USER: 'waiting_user'
+    };
+
+    class XIUIApp {
       constructor() {
-        super();
-        this.messageEl = null;
-        this.contentEl = null;
+        this.state = UI_STATE.IDLE;
+        this.collector = new Collector();
         this.textBuffer = '';
-        this.inCard = false;
-        this.currentCardContainer = null;
-        this.cardLines = [];
+        this.contentEl = null;
         this.currentTextEl = null;
         this.pendingRender = null;
       }
 
       _createMessage() {
-        this.messageEl = document.createElement('div');
-        this.messageEl.className = 'message assistant';
-        this.messageEl.innerHTML = '<div class="avatar">AI</div><div class="content"></div>';
-        output.appendChild(this.messageEl);
-        this.contentEl = this.messageEl.querySelector('.content');
+        const messageEl = document.createElement('div');
+        messageEl.className = 'message assistant';
+        messageEl.innerHTML = '<div class="avatar">AI</div><div class="content"></div>';
+        output.appendChild(messageEl);
+        this.contentEl = messageEl.querySelector('.content');
       }
 
-      _renderTextBuffer() {
+      _renderText() {
         if (!this.textBuffer.trim()) return;
         let html = marked.parse(this.textBuffer);
         html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
@@ -429,121 +392,48 @@
         this.currentTextEl.innerHTML = html;
       }
 
-      onCardStart(type, id) {
-        this.inCard = true;
-        this.cardLines = [];
-        this.currentCardContainer = document.createElement('div');
-        this.currentCardContainer.className = 'card-preview';
-        this.currentCardContainer.dataset.cardType = type;
-        this.currentCardContainer.dataset.cardId = id;
-        this.contentEl.appendChild(this.currentCardContainer);
-      }
-
-      onCardLine(card, line) {
-        this.cardLines.push(line);
-        let html = marked.parse(line);
-        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
-          try {
-            const span = document.createElement('span');
-            katex.render(formula.trim(), span, { throwOnError: false });
-            return span.innerHTML;
-          } catch (e) {
-            return `<code>${formula}</code>`;
-          }
-        });
-        const div = document.createElement('div');
-        div.className = 'card-line';
-        div.innerHTML = html;
-        this.currentCardContainer.appendChild(div);
-      }
-
-      onChar(char, textBuffer, inCard) {
-        if (inCard) {
-          return;
-        }
-        this.textBuffer = textBuffer;
-        if (this.pendingRender) {
-          cancelAnimationFrame(this.pendingRender);
-        }
-        this.pendingRender = requestAnimationFrame(() => {
-          this._renderTextBuffer();
-          this.pendingRender = null;
-        });
-      }
-
-      onCardEnd(card, lines) {
-        this.inCard = false;
-        
-        if (card.type === 'submit') {
-          if (this.currentCardContainer) {
-            this.currentCardContainer.remove();
-            this.currentCardContainer = null;
-          }
-          return;
-        }
-
-        const data = Renderer.extractData(card, lines);
-        const el = this._createCardElement(card, data, lines);
-        
-        if (this.currentCardContainer) {
-          this.currentCardContainer.replaceWith(el);
-          this.currentCardContainer = null;
-        }
-
-        if (card.type === 'choice') {
-          el.querySelectorAll('.option').forEach(opt => {
-            opt.addEventListener('click', () => {
-              el.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
-              opt.classList.add('selected');
-              collector.onChoiceSelect(card.id, opt.dataset.id);
-            });
-          });
-        }
-      }
-
-      onSubmitCard(card) {
-        const btn = document.createElement('button');
-        btn.textContent = card.attrs.label || '提交';
-        btn.style.cssText = 'background:linear-gradient(135deg,#667eea,#7c3aed);color:white;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:15px;font-weight:500;margin:12px 0;transition:all 0.2s ease;';
-        btn.addEventListener('click', () => {
-          const { valid, errors } = collector.build(card.id, parser.pendingCards);
-          if (!valid) {
-            alert(`请完成所有必填项：${errors.join(', ')}`);
-            return;
-          }
-          alert('提交成功！');
-        });
-        this.contentEl.appendChild(btn);
-      }
-
-      _createCardElement(card, data, lines) {
+      _renderCard(card) {
+        const data = Renderer.extractData(card);
         const el = document.createElement('div');
         el.className = `card card-${card.type}`;
+        el.dataset.cardId = card.id;
 
         switch (card.type) {
           case 'choice':
             el.innerHTML = `<p><strong>${data.question}</strong></p>
               ${data.options.map(o => `<span class="option" data-id="${o.id}">${o.id}. ${o.label}</span>`).join('')}`;
+            el.querySelectorAll('.option').forEach(opt => {
+              opt.addEventListener('click', () => {
+                el.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+                this.collector.onChoiceSelect(card.id, opt.dataset.id);
+              });
+            });
             break;
+
           case 'tip':
             el.innerHTML = data.body.replace(/\n/g, '<br>');
             break;
+
           case 'progress':
             el.innerHTML = `<p><strong>${data.title}</strong> ${data.label}</p>
               <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
             break;
+
           case 'input':
             el.innerHTML = `<p><strong>${data.title}</strong></p>
               <input type="text" class="card-input" placeholder="${data.placeholder || ''}" data-card-id="${card.id}">`;
             break;
+
           case 'summary':
-            const summaryRows = lines.filter(l => l.startsWith('|'));
+            const summaryRows = card.lines.filter(l => l.startsWith('|'));
             const summaryHtml = summaryRows.map(row => {
               const cells = row.split('|').filter(Boolean).map(c => `<td>${c.trim()}</td>`).join('');
               return `<tr>${cells}</tr>`;
             }).join('');
             el.innerHTML = `<table class="summary-table">${summaryHtml}</table>`;
             break;
+
           case 'confirm':
             el.innerHTML = `<p><strong>${data.title}</strong></p>
               <p>${data.description}</p>
@@ -552,24 +442,86 @@
                 <button class="btn-cancel">${data.cancelLabel || '取消'}</button>
               </div>`;
             break;
+
+          case 'submit':
+            const btn = document.createElement('button');
+            btn.className = 'btn-submit';
+            btn.textContent = card.attrs.label || '提交';
+            btn.addEventListener('click', () => this._handleSubmit(card));
+            this.contentEl.appendChild(btn);
+            this.state = UI_STATE.WAITING_USER;
+            return;
+
           default:
-            el.innerHTML = `<p>${lines.join('<br>')}</p>`;
+            el.innerHTML = `<p>${card.lines.join('<br>')}</p>`;
             break;
         }
 
-        return el;
+        this.contentEl.appendChild(el);
       }
 
-      showCursor() {
+      _handleSubmit(card) {
+        const { valid, errors } = this.collector.build(card.id, parser.pendingCards);
+        if (!valid) {
+          alert(`请完成所有必填项：${errors.join(', ')}`);
+          return;
+        }
+        alert('提交成功！');
+        this.collector.reset();
+        this.state = UI_STATE.IDLE;
+      }
+
+      startStreaming(response) {
+        output.innerHTML = '';
+        this.state = UI_STATE.STREAMING;
+        this.textBuffer = '';
+        this.currentTextEl = null;
+        this.collector.reset();
+
+        this._createMessage();
         const cursor = document.createElement('span');
         cursor.className = 'cursor';
         this.contentEl.appendChild(cursor);
-        return cursor;
+
+        const parser = new Parser({
+          onText: (buffer) => {
+            this.textBuffer = buffer;
+            if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
+            this.pendingRender = requestAnimationFrame(() => {
+              this._renderText();
+              this.pendingRender = null;
+            });
+          },
+          onCard: (card) => {
+            this._renderCard(card);
+          },
+          onStateChange: (from, to) => {
+            console.log(`[XIUI] state: ${from} -> ${to}`);
+          }
+        });
+
+        const fullText = response.join('\n');
+        let charIndex = 0;
+        const typeSpeed = 30;
+
+        const typeNext = () => {
+          if (charIndex >= fullText.length) {
+            parser.flush();
+            this._renderText();
+            cursor.remove();
+            return;
+          }
+          parser.feedChar(fullText[charIndex]);
+          charIndex++;
+          output.scrollTop = output.scrollHeight;
+          setTimeout(typeNext, typeSpeed);
+        };
+
+        setTimeout(typeNext, 500);
       }
     }
 
-    let renderer = new DOMRenderer();
-    let parser = new Parser(renderer);
+    const app = new XIUIApp();
 
     const datasets = {
       basic: [
@@ -716,46 +668,15 @@
       ],
     };
 
-    function startStreaming(response) {
-      output.innerHTML = '';
-      renderer = new DOMRenderer();
-      parser = new Parser(renderer);
-
-      renderer._createMessage();
-      const cursor = renderer.showCursor();
-
-      const fullText = response.join('\n');
-      let charIndex = 0;
-      const typeSpeed = 30;
-
-      function typeNext() {
-        if (charIndex >= fullText.length) {
-          parser.flush();
-          renderer._renderTextBuffer();
-          cursor.remove();
-          return;
-        }
-
-        const char = fullText[charIndex];
-        parser.feedChar(char);
-
-        charIndex++;
-        output.scrollTop = output.scrollHeight;
-        setTimeout(typeNext, typeSpeed);
-      }
-
-      setTimeout(typeNext, 500);
-    }
-
     window.loadDataset = function() {
       const select = document.getElementById('dataset-select');
       const key = select.value;
       if (datasets[key]) {
-        startStreaming(datasets[key]);
+        app.startStreaming(datasets[key]);
       }
     };
 
-    startStreaming(datasets.basic);
+    app.startStreaming(datasets.basic);
   </script>
 </body>
 </html>

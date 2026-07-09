@@ -1,30 +1,14 @@
-/**
- * XIUI — Xuanhua Interactive User Interface
- * 生成式可交互 UI 协议
- */
 export { Parser } from './parser.js';
 export { Renderer } from './renderer.js';
 export { Collector } from './collector.js';
 export { MessageManager } from './message-manager.js';
 
-/**
- * XIUI Chat 完整封装
- * 
- * @example
- * const chat = new XIUIChat({
- *   systemPrompt: '你是学习助手...',
- *   fetchChat: async (messages) => { ... }  // 返回 ReadableStream
- * });
- * 
- * await chat.sendMessage('今天学什么？');
- * await chat.submitCards('submit_001');
- */
 export class XIUIChat {
   constructor({ systemPrompt, fetchChat, renderer }) {
     this.manager = new MessageManager(systemPrompt);
-    this.parser = new Parser(renderer);
     this.collector = new Collector();
     this.fetchChat = fetchChat;
+    this.renderer = renderer;
   }
 
   async sendMessage(text) {
@@ -33,14 +17,14 @@ export class XIUIChat {
   }
 
   async submitCards(submitId) {
-    const { valid, result, errors } = this.collector.build(submitId, this.parser.pendingCards);
+    const { valid, result, errors } = this.collector.build(submitId, this.pendingCards);
     
     if (!valid) {
       return { success: false, errors };
     }
 
     this.manager.addInteractionEvent(result);
-    this.parser.pendingCards = [];
+    this.pendingCards = [];
     this.collector.reset();
     await this._callModel();
     
@@ -55,20 +39,33 @@ export class XIUIChat {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
 
+    const parser = new Parser({
+      onText: (buffer) => {
+        if (this.renderer.onText) this.renderer.onText(buffer);
+      },
+      onCard: (card) => {
+        if (['choice', 'input', 'confirm'].includes(card.type)) {
+          this.pendingCards.push(card);
+        }
+        if (this.renderer.onCard) this.renderer.onCard(card);
+      },
+      onStateChange: (from, to) => {
+        if (this.renderer.onStateChange) this.renderer.onStateChange(from, to);
+      }
+    });
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       
       const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        fullResponse += line + '\n';
-        this.parser.feed(line);
+      for (const char of chunk) {
+        fullResponse += char;
+        parser.feedChar(char);
       }
     }
 
+    parser.flush();
     this.manager.addAssistantMessage(fullResponse.trim());
     return fullResponse;
   }

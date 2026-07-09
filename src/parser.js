@@ -1,122 +1,149 @@
-/**
- * XIUI 流式解析器
- * 逐字符解析模型输出，识别卡片边界，触发渲染回调
- */
 export class Parser {
-  constructor(renderer) {
-    this.stack = [];           // 卡片栈
-    this.buffer = [];          // 当前卡片内容行
-    this.pendingCards = [];    // 未提交的交互卡片
-    this.renderer = renderer;
-    this.inCard = false;
-    this.lineBuffer = '';      // 当前行缓冲区（字符累积）
-    this.textBuffer = '';      // 已确认的文本缓冲区
+  static STATE = {
+    IDLE: 'idle',
+    TEXT: 'text',
+    CARD: 'card',
+    COMMENT: 'comment'
+  };
+
+  constructor(emitter) {
+    this.emitter = emitter;
+    this.state = Parser.STATE.IDLE;
+    this.textBuffer = '';
+    this.cardBuffer = '';
+    this.currentCard = null;
+    this.pendingCards = [];
+    this.commentBuffer = '';
   }
 
-  _isCommentStart(line) {
-    return line.startsWith('<');
-  }
-
-  /**
-   * 喂入单个字符（流式传输场景）
-   * @param {string} char 单个字符
-   */
   feedChar(char) {
-    this.lineBuffer += char;
-    
-    if (char === '\n') {
-      const line = this.lineBuffer.slice(0, -1);
-      this.lineBuffer = '';
-      
-      const start = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
-      if (start) {
-        const [, type, id, attrStr] = start;
-        this.stack.push({ type, id, attrs: this._parseAttrs(attrStr) });
-        this.buffer = [];
-        this.inCard = true;
-        this.renderer.onCardStart(type, id);
-        return;
-      }
-
-      if (line === '<!-- /card -->') {
-        const card = this.stack.pop();
-        this.renderer.onCardEnd(card, [...this.buffer]);
-        this.buffer = [];
-        this.inCard = this.stack.length > 0;
-
-        if (['choice', 'input', 'confirm'].includes(card.type)) {
-          this.pendingCards.push(card);
-        }
-        if (card.type === 'submit') {
-          this.renderer.onSubmitCard(card);
-        }
-        return;
-      }
-
-      if (this.inCard) {
-        this.buffer.push(line);
-        this.renderer.onCardLine(this.stack[this.stack.length - 1], line);
-      } else {
-        if (!line.startsWith('<!--')) {
-          this.textBuffer += line + '\n';
-          this.renderer.onChar(char, this.textBuffer, false);
-        }
-      }
-    } else {
-      if (!this.inCard && !this._isCommentStart(this.lineBuffer)) {
-        const previewBuffer = this.textBuffer + this.lineBuffer;
-        this.renderer.onChar(char, previewBuffer, false);
-      }
+    switch (this.state) {
+      case Parser.STATE.IDLE:
+        this._handleIdle(char);
+        break;
+      case Parser.STATE.TEXT:
+        this._handleText(char);
+        break;
+      case Parser.STATE.CARD:
+        this._handleCard(char);
+        break;
+      case Parser.STATE.COMMENT:
+        this._handleComment(char);
+        break;
     }
   }
 
-  /**
-   * 喂入一行文本（向后兼容）
-   * @param {string} line
-   */
   feed(line) {
     line.split('').forEach(char => this.feedChar(char));
     this.feedChar('\n');
   }
 
-  /**
-   * 刷新缓冲区中的剩余内容
-   */
   flush() {
-    if (this.lineBuffer) {
-      const line = this.lineBuffer;
-      this.lineBuffer = '';
-      
-      if (line === '<!-- /card -->' && this.stack.length > 0) {
-        const card = this.stack.pop();
-        this.renderer.onCardEnd(card, [...this.buffer]);
-        this.buffer = [];
-        this.inCard = this.stack.length > 0;
+    if (this.state === Parser.STATE.TEXT && this.textBuffer) {
+      this.emitter.onText(this.textBuffer);
+    }
+    if (this.state === Parser.STATE.CARD && this.cardBuffer) {
+      this._finalizeCard();
+    }
+    this.state = Parser.STATE.IDLE;
+  }
 
-        if (['choice', 'input', 'confirm'].includes(card.type)) {
-          this.pendingCards.push(card);
-        }
-        if (card.type === 'submit') {
-          this.renderer.onSubmitCard(card);
-        }
-        return;
-      }
-      
-      if (this.inCard) {
-        this.buffer.push(line);
-        this.renderer.onCardLine(this.stack[this.stack.length - 1], line);
-      } else {
+  reset() {
+    this.state = Parser.STATE.IDLE;
+    this.textBuffer = '';
+    this.cardBuffer = '';
+    this.currentCard = null;
+    this.pendingCards = [];
+    this.commentBuffer = '';
+  }
+
+  _handleIdle(char) {
+    if (char === '<') {
+      this.commentBuffer = '<';
+      this.state = Parser.STATE.COMMENT;
+    } else {
+      this.textBuffer = char;
+      this._transition(Parser.STATE.TEXT);
+      this.emitter.onText(this.textBuffer);
+    }
+  }
+
+  _handleText(char) {
+    if (char === '<') {
+      this.commentBuffer = '<';
+      this.state = Parser.STATE.COMMENT;
+    } else {
+      this.textBuffer += char;
+      this.emitter.onText(this.textBuffer);
+    }
+  }
+
+  _handleCard(char) {
+    if (char === '<') {
+      this.commentBuffer = '<';
+      this.state = Parser.STATE.COMMENT;
+    } else {
+      this.cardBuffer += char;
+    }
+  }
+
+  _handleComment(char) {
+    this.commentBuffer += char;
+
+    if (this.commentBuffer.endsWith('<!--')) {
+      const line = this.commentBuffer.slice(0, -4).trim();
+      if (line) {
         this.textBuffer += line;
-        this.renderer.onChar('', this.textBuffer, false);
+        this.emitter.onText(this.textBuffer);
+      }
+    }
+
+    if (this.commentBuffer.endsWith('-->')) {
+      const comment = this.commentBuffer.slice(4, -3).trim();
+      const cardMatch = comment.match(/^card:(\w+):(\w+)(?:\[@(.+)\])?$/);
+
+      if (cardMatch) {
+        const [, type, id, attrStr] = cardMatch;
+        if (type === '/card') {
+          this._finalizeCard();
+        } else {
+          this.currentCard = { type, id, attrs: this._parseAttrs(attrStr) };
+          this.cardBuffer = '';
+          this._transition(Parser.STATE.CARD);
+        }
+      } else {
+        this._transition(Parser.STATE.IDLE);
+      }
+      this.commentBuffer = '';
+    }
+  }
+
+  _finalizeCard() {
+    if (!this.currentCard) return;
+
+    const lines = this.cardBuffer.split('\n').filter(line => line.trim());
+    const card = { ...this.currentCard, lines };
+
+    if (['choice', 'input', 'confirm'].includes(card.type)) {
+      this.pendingCards.push(card);
+    }
+
+    this.emitter.onCard(card);
+    this.currentCard = null;
+    this.cardBuffer = '';
+    this._transition(Parser.STATE.IDLE);
+  }
+
+  _transition(newState) {
+    if (this.state !== newState) {
+      const from = this.state;
+      this.state = newState;
+      if (this.emitter.onStateChange) {
+        this.emitter.onStateChange(from, newState);
       }
     }
   }
 
-  /**
-   * 解析属性字符串 "@key:value@key:value"
-   * @param {string} s
-   * @returns {Object}
-   */
   _parseAttrs(s) {
     if (!s) return {};
     const attrs = {};
@@ -125,15 +152,5 @@ export class Parser {
       if (idx > 0) attrs[pair.slice(0, idx)] = pair.slice(idx + 1);
     });
     return attrs;
-  }
-
-  /**
-   * 重置解析器状态
-   */
-  reset() {
-    this.stack = [];
-    this.buffer = [];
-    this.pendingCards = [];
-    this.inCard = false;
   }
 }
