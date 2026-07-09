@@ -1,22 +1,54 @@
 /**
  * XIUI 流式解析器
- * 逐行解析模型输出，识别卡片边界，触发渲染回调
+ * 逐字符解析模型输出，识别卡片边界，触发渲染回调
  */
 export class Parser {
   constructor(renderer) {
-    this.stack = [];         // 卡片栈
-    this.buffer = [];        // 当前卡片内容行
-    this.pendingCards = [];  // 未提交的交互卡片
+    this.stack = [];           // 卡片栈
+    this.buffer = [];          // 当前卡片内容行
+    this.pendingCards = [];    // 未提交的交互卡片
     this.renderer = renderer;
     this.inCard = false;
+    this.lineBuffer = '';      // 当前行缓冲区（字符累积）
   }
 
   /**
-   * 喂入一行文本
+   * 喂入单个字符（流式传输场景）
+   * @param {string} char 单个字符
+   */
+  feedChar(char) {
+    this.lineBuffer += char;
+    
+    if (char === '\n') {
+      const line = this.lineBuffer.slice(0, -1);
+      this.lineBuffer = '';
+      this._processLine(line);
+    }
+  }
+
+  /**
+   * 喂入一行文本（向后兼容）
    * @param {string} line
    */
   feed(line) {
-    // 卡片开始：<!-- card:类型:id --> 或 <!-- card:类型:id[@key:value@...] -->
+    this._processLine(line);
+  }
+
+  /**
+   * 刷新缓冲区中的剩余内容
+   */
+  flush() {
+    if (this.lineBuffer) {
+      this._processLine(this.lineBuffer);
+      this.lineBuffer = '';
+    }
+  }
+
+  /**
+   * 处理一行文本
+   * @param {string} line
+   */
+  _processLine(line) {
     const start = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
     if (start) {
       const [, type, id, attrStr] = start;
@@ -27,7 +59,6 @@ export class Parser {
       return;
     }
 
-    // 卡片结束
     if (line === '<!-- /card -->') {
       const card = this.stack.pop();
       this.renderer.onCardEnd(card, [...this.buffer]);
@@ -43,7 +74,6 @@ export class Parser {
       return;
     }
 
-    // 内容行
     this.buffer.push(line);
 
     if (this.inCard) {

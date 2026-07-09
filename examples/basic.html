@@ -723,26 +723,17 @@
       const fullText = response.join('\n');
       let charIndex = 0;
       const typeSpeed = 30;
-      let currentLine = '';
 
       function typeNext() {
         if (charIndex >= fullText.length) {
-          if (currentLine) {
-            parser.feed(currentLine);
-          }
+          parser.flush();
           renderer._flushMarkdown();
           cursor.remove();
           return;
         }
 
         const char = fullText[charIndex];
-
-        if (char === '\n') {
-          parser.feed(currentLine);
-          currentLine = '';
-        } else {
-          currentLine += char;
-        }
+        parser.feedChar(char);
 
         charIndex++;
         output.scrollTop = output.scrollHeight;
