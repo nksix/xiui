@@ -411,10 +411,6 @@
 
       _flushMarkdown() {
         if (this.markdownBuffer.length === 0) return;
-        if (this.currentLineEl) {
-          this.currentLineEl.remove();
-          this.currentLineEl = null;
-        }
         const md = this.markdownBuffer.join('\n');
         if (!md.trim()) {
           this.markdownBuffer = [];
@@ -433,8 +429,35 @@
         const div = document.createElement('div');
         div.className = 'text';
         div.innerHTML = html;
-        this.contentEl.appendChild(div);
+        if (this.currentLineEl) {
+          this.contentEl.replaceChild(div, this.currentLineEl);
+        } else {
+          this.contentEl.appendChild(div);
+        }
+        this.currentLineEl = null;
         this.markdownBuffer = [];
+      }
+
+      _renderLine(line) {
+        let html = marked.parse(line);
+        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
+          try {
+            const span = document.createElement('span');
+            katex.render(formula.trim(), span, { throwOnError: false });
+            return span.innerHTML;
+          } catch (e) {
+            return `<code>${formula}</code>`;
+          }
+        });
+        const div = document.createElement('div');
+        div.className = 'text';
+        div.innerHTML = html;
+        if (this.currentLineEl) {
+          this.contentEl.replaceChild(div, this.currentLineEl);
+        } else {
+          this.contentEl.appendChild(div);
+        }
+        this.currentLineEl = null;
       }
 
       onCardStart(type, id) {
@@ -521,7 +544,27 @@
 
       onMarkdownLine(line) {
         if (!this.inCard) {
-          this.markdownBuffer.push(line);
+          if (line.trim()) {
+            let html = marked.parse(line);
+            html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
+              try {
+                const span = document.createElement('span');
+                katex.render(formula.trim(), span, { throwOnError: false });
+                return span.innerHTML;
+              } catch (e) {
+                return `<code>${formula}</code>`;
+              }
+            });
+            const div = document.createElement('div');
+            div.className = 'text';
+            div.innerHTML = html;
+            if (this.currentLineEl) {
+              this.contentEl.replaceChild(div, this.currentLineEl);
+            } else {
+              this.contentEl.appendChild(div);
+            }
+            this.currentLineEl = null;
+          }
         }
       }
 
