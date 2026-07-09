@@ -60,7 +60,7 @@ export class Parser {
   _handleIdle(char) {
     if (char === '<') {
       this.commentBuffer = '<';
-      this.state = Parser.STATE.COMMENT;
+      this._transition(Parser.STATE.COMMENT);
     } else {
       this.textBuffer = char;
       this._transition(Parser.STATE.TEXT);
@@ -71,7 +71,7 @@ export class Parser {
   _handleText(char) {
     if (char === '<') {
       this.commentBuffer = '<';
-      this.state = Parser.STATE.COMMENT;
+      this._transition(Parser.STATE.COMMENT);
     } else {
       this.textBuffer += char;
       this.emitter.onText(this.textBuffer);
@@ -81,7 +81,7 @@ export class Parser {
   _handleCard(char) {
     if (char === '<') {
       this.commentBuffer = '<';
-      this.state = Parser.STATE.COMMENT;
+      this._transition(Parser.STATE.COMMENT);
     } else {
       this.cardBuffer += char;
     }
@@ -100,17 +100,16 @@ export class Parser {
 
     if (this.commentBuffer.endsWith('-->')) {
       const comment = this.commentBuffer.slice(4, -3).trim();
-      const cardMatch = comment.match(/^card:(\w+):(\w+)(?:\[@(.+)\])?$/);
+      const cardStartMatch = comment.match(/^card:([^:]+):(\w+)(?:\[@(.+)\])?$/);
+      const cardEndMatch = comment.match(/^\/card$/);
 
-      if (cardMatch) {
-        const [, type, id, attrStr] = cardMatch;
-        if (type === '/card') {
-          this._finalizeCard();
-        } else {
-          this.currentCard = { type, id, attrs: this._parseAttrs(attrStr) };
-          this.cardBuffer = '';
-          this._transition(Parser.STATE.CARD);
-        }
+      if (cardEndMatch && this.currentCard) {
+        this._finalizeCard();
+      } else if (cardStartMatch) {
+        const [, tag, id, attrStr] = cardStartMatch;
+        this.currentCard = { type: tag, id, attrs: this._parseAttrs(attrStr) };
+        this.cardBuffer = '';
+        this._transition(Parser.STATE.CARD);
       } else {
         this._transition(Parser.STATE.IDLE);
       }
