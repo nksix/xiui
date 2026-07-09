@@ -3,65 +3,369 @@
 <head>
   <meta charset="UTF-8">
   <title>XIUI 基础示例</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    body { font-family: system-ui; max-width: 700px; margin: 40px auto; }
-    .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 12px 0; }
-    .card-choice .option { display: block; padding: 8px 12px; margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; }
-    .card-choice .option:hover { background: #f0f4ff; }
-    .card-choice .option.selected { background: #e0e8ff; border-color: #667eea; }
-    .card-tip { background: #f8f9ff; border-left: 4px solid #667eea; }
-    .card-input input, .card-input textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-    .card-submit button { background: #667eea; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; }
-    .card-progress .bar { height: 8px; background: #e0e0e0; border-radius: 4px; margin: 8px 0; }
-    .card-progress .fill { height: 100%; background: #667eea; border-radius: 4px; }
-    .card-summary { display: inline-block; min-width: 120px; text-align: center; }
-    .card-summary .value { font-size: 24px; font-weight: bold; }
-    .card-confirm button { margin: 4px; padding: 8px 20px; border-radius: 6px; cursor: pointer; }
-    .skeleton { height: 60px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
-    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-    #output { margin: 20px 0; }
-    #input-area { display: flex; gap: 8px; margin-top: 20px; }
-    #input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
-    #input-area button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    :root {
+      --bg-primary: #0f0f23;
+      --bg-secondary: #1a1a2e;
+      --bg-tertiary: #16213e;
+      --text-primary: #e4e4e7;
+      --text-secondary: #a1a1aa;
+      --accent: #667eea;
+      --accent-hover: #7c8eea;
+      --border: #27272a;
+      --card-bg: #1e1e2f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .header .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .header .badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    #output::-webkit-scrollbar { width: 6px; }
+    #output::-webkit-scrollbar-track { background: transparent; }
+    #output::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    .message .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 9999px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .message.assistant .avatar {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+    }
+
+    .message.user .avatar {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .message .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message .text {
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .message.assistant .text {
+      background: var(--bg-secondary);
+      border-radius: 0 16px 16px 16px;
+    }
+
+    .message.user .text {
+      background: var(--accent);
+      color: white;
+      border-radius: 16px 0 16px 16px;
+      margin-left: auto;
+      max-width: 80%;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 12px 0;
+      transition: all 0.2s ease;
+    }
+
+    .card:hover { border-color: var(--accent); }
+
+    .card-choice .option {
+      display: block;
+      padding: 10px 14px;
+      margin: 6px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+
+    .card-choice .option:hover {
+      background: rgba(102, 126, 234, 0.1);
+      border-color: rgba(102, 126, 234, 0.3);
+    }
+
+    .card-choice .option.selected {
+      background: rgba(102, 126, 234, 0.15);
+      border-color: var(--accent);
+    }
+
+    .card-tip {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(124, 58, 237, 0.1));
+      border-left: 4px solid var(--accent);
+      padding-left: 20px;
+    }
+
+    .card-submit button {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .card-submit button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .card-progress .bar {
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      margin: 8px 0;
+      overflow: hidden;
+    }
+
+    .card-progress .fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #7c3aed);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .card-preview {
+      background: var(--card-bg);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 12px 0;
+      transition: all 0.3s ease;
+    }
+
+    .card-preview .card-line {
+      line-height: 1.6;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    #input-area {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    #input-area input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 15px;
+      outline: none;
+    }
+
+    #input-area input:focus { border-color: var(--accent); }
+    #input-area input::placeholder { color: var(--text-secondary); }
+
+    #input-area button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    #input-area button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.2em;
+      background: var(--accent);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>XIUI 基础示例</h1>
-  <div id="output"></div>
-  <div id="input-area">
-    <input type="text" id="user-input" placeholder="输入消息..." />
-    <button onclick="sendMessage()">发送</button>
+  <div class="container">
+    <div class="header">
+      <div class="logo">X</div>
+      <h1>XIUI 基础示例</h1>
+      <span class="badge">v1.0.0</span>
+    </div>
+    <div id="output"></div>
+    <div id="input-area">
+      <input type="text" id="user-input" placeholder="输入消息..." />
+      <button onclick="sendMessage()">发送</button>
+    </div>
   </div>
 
   <script type="module">
     import { Parser, Renderer, Collector } from '../src/index.js';
 
+    const output = document.getElementById('output');
+    const collector = new Collector();
+
     class DOMRenderer extends Renderer {
-      constructor(outputEl) {
+      constructor() {
         super();
-        this.output = outputEl;
-        this.currentSkeleton = null;
+        this.messageEl = null;
+        this.contentEl = null;
+        this.markdownBuffer = [];
+        this.inCard = false;
+        this.currentCardContainer = null;
+        this.cardLines = [];
+      }
+
+      _createMessage() {
+        this.messageEl = document.createElement('div');
+        this.messageEl.className = 'message assistant';
+        this.messageEl.innerHTML = '<div class="avatar">AI</div><div class="content"></div>';
+        output.appendChild(this.messageEl);
+        this.contentEl = this.messageEl.querySelector('.content');
+      }
+
+      _flushMarkdown() {
+        if (this.markdownBuffer.length === 0) return;
+        const md = this.markdownBuffer.join('\n');
+        if (!md.trim()) {
+          this.markdownBuffer = [];
+          return;
+        }
+        const html = marked.parse(md);
+        const div = document.createElement('div');
+        div.className = 'text';
+        div.innerHTML = html;
+        this.contentEl.appendChild(div);
+        this.markdownBuffer = [];
       }
 
       onCardStart(type, id) {
-        this.currentSkeleton = document.createElement('div');
-        this.currentSkeleton.className = 'skeleton';
-        this.currentSkeleton.id = `skeleton-${id}`;
-        this.output.appendChild(this.currentSkeleton);
+        this._flushMarkdown();
+        this.inCard = true;
+        this.cardLines = [];
+        this.currentCardContainer = document.createElement('div');
+        this.currentCardContainer.className = 'card-preview';
+        this.currentCardContainer.dataset.cardType = type;
+        this.currentCardContainer.dataset.cardId = id;
+        this.contentEl.appendChild(this.currentCardContainer);
+      }
+
+      onCardLine(card, line) {
+        this.cardLines.push(line);
+        const html = marked.parse(line);
+        const div = document.createElement('div');
+        div.className = 'card-line';
+        div.innerHTML = html;
+        this.currentCardContainer.appendChild(div);
       }
 
       onCardEnd(card, lines) {
+        this.inCard = false;
         const data = Renderer.extractData(card, lines);
         const el = this._createCardElement(card, data);
         
-        if (this.currentSkeleton) {
-          this.currentSkeleton.replaceWith(el);
-          this.currentSkeleton = null;
-        } else {
-          this.output.appendChild(el);
+        if (this.currentCardContainer) {
+          this.currentCardContainer.replaceWith(el);
+          this.currentCardContainer = null;
         }
 
-        // 绑定交互
         if (card.type === 'choice') {
           el.querySelectorAll('.option').forEach(opt => {
             opt.addEventListener('click', () => {
@@ -70,38 +374,29 @@
               collector.onChoiceSelect(card.id, opt.dataset.id);
             });
           });
-        } else if (card.type === 'input') {
-          const input = el.querySelector('input, textarea');
-          input?.addEventListener('input', (e) => {
-            collector.onInput(card.id, e.target.value);
-          });
-        } else if (card.type === 'confirm') {
-          el.querySelector('.btn-yes')?.addEventListener('click', () => collector.onConfirm(card.id, 'yes'));
-          el.querySelector('.btn-no')?.addEventListener('click', () => collector.onConfirm(card.id, 'no'));
         }
       }
 
       onMarkdownLine(line) {
-        if (!line.trim()) return;
-        const p = document.createElement('p');
-        p.textContent = line;
-        this.output.appendChild(p);
+        if (!this.inCard) {
+          this.markdownBuffer.push(line);
+        }
       }
 
       onSubmitCard(card) {
+        this._flushMarkdown();
         const btn = document.createElement('button');
         btn.textContent = card.attrs.label || '提交';
-        btn.style.cssText = 'background:#667eea;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;margin:8px 0;';
+        btn.style.cssText = 'background:linear-gradient(135deg,#667eea,#7c3aed);color:white;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:15px;font-weight:500;margin:12px 0;transition:all 0.2s ease;';
         btn.addEventListener('click', () => {
           const { valid, errors } = collector.build(card.id, parser.pendingCards);
           if (!valid) {
             alert(`请完成所有必填项：${errors.join(', ')}`);
             return;
           }
-          alert('提交成功！查看控制台获取事件 JSON');
-          console.log('Submit event:', collector.build(card.id, parser.pendingCards));
+          alert('提交成功！');
         });
-        this.output.appendChild(btn);
+        this.contentEl.appendChild(btn);
       }
 
       _createCardElement(card, data) {
@@ -116,42 +411,28 @@
           case 'tip':
             el.innerHTML = data.body.replace(/\n/g, '<br>');
             break;
-          case 'input':
-            el.innerHTML = `<p>${data.title}</p>
-              <${card.attrs.type === 'multiline' ? 'textarea' : 'input'} placeholder="${data.placeholder}">`;
-            break;
           case 'progress':
             el.innerHTML = `<p><strong>${data.title}</strong> ${data.label}</p>
               <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
-            break;
-          case 'summary':
-            el.innerHTML = `<div class="value">${data.value}</div>
-              <small>${data.title}</small>
-              ${data.subtitle ? `<br><small>${data.subtitle}</small>` : ''}`;
-            break;
-          case 'confirm':
-            el.innerHTML = `<p><strong>${data.title}</strong></p>
-              <p>${data.description}</p>
-              <button class="btn-yes">${data.confirmLabel}</button>
-              <button class="btn-no">${data.cancelLabel}</button>`;
             break;
         }
 
         return el;
       }
+
+      showCursor() {
+        const cursor = document.createElement('span');
+        cursor.className = 'cursor';
+        this.contentEl.appendChild(cursor);
+        return cursor;
+      }
     }
 
-    // 初始化
-    const output = document.getElementById('output');
-    const renderer = new DOMRenderer(output);
+    const renderer = new DOMRenderer();
     const parser = new Parser(renderer);
-    const collector = new Collector();
-    window.parser = parser;
-    window.collector = collector;
 
-    // 模拟模型输出
     const demoResponse = [
-      '今天我们来学习 Python 的可变类型和不可变类型。',
+      '今天我们来学习 Python 的**可变类型**和**不可变类型**。',
       '',
       '<!-- card:choice:c1 -->',
       '下面哪个是可变类型？',
@@ -161,30 +442,62 @@
       '- D. 元组 tuple',
       '<!-- /card -->',
       '',
+      '<!-- card:tip:t1 -->',
+      '> 💡 知识点：可变类型可以在原地修改，不可变类型每次修改都会创建新对象。',
+      '<!-- /card -->',
+      '',
+      '<!-- card:progress:p1 -->',
+      '**学习进度** 50% (1/2)',
+      '<!-- /card -->',
+      '',
       '<!-- card:submit:s1 -->',
-      '提交',
+      '提交答案',
       '<!-- /card -->',
     ];
 
-    let lineIndex = 0;
-    const interval = setInterval(() => {
-      if (lineIndex >= demoResponse.length) {
-        clearInterval(interval);
+    renderer._createMessage();
+    const cursor = renderer.showCursor();
+
+    const fullText = demoResponse.join('\n');
+    let charIndex = 0;
+    const typeSpeed = 30;
+    let currentLine = '';
+
+    function typeNext() {
+      if (charIndex >= fullText.length) {
+        if (currentLine) {
+          parser.feed(currentLine);
+        }
+        renderer._flushMarkdown();
+        cursor.remove();
         return;
       }
-      parser.feed(demoResponse[lineIndex]);
-      lineIndex++;
-    }, 200);
 
-    // 用户输入
+      const char = fullText[charIndex];
+
+      if (char === '\n') {
+        parser.feed(currentLine);
+        currentLine = '';
+      } else {
+        currentLine += char;
+      }
+
+      charIndex++;
+      output.scrollTop = output.scrollHeight;
+      setTimeout(typeNext, typeSpeed);
+    }
+
+    setTimeout(typeNext, 500);
+
     window.sendMessage = function() {
       const input = document.getElementById('user-input');
       const text = input.value.trim();
       if (!text) return;
       
-      const p = document.createElement('p');
-      p.innerHTML = `<strong>你：</strong>${text}`;
-      output.appendChild(p);
+      const message = document.createElement('div');
+      message.className = 'message user';
+      message.innerHTML = '<div class="avatar">👤</div><div class="content"><div class="text">' + text + '</div></div>';
+      output.appendChild(message);
       input.value = '';
     };
   </script>
