@@ -336,6 +336,7 @@
         <option value="form">表单输入</option>
         <option value="summary">总结卡片</option>
         <option value="confirm">确认弹窗</option>
+        <option value="complex">复杂内容</option>
       </select>
       <button onclick="loadDataset()">加载</button>
     </div>
@@ -442,7 +443,17 @@
             break;
 
           case 'tip':
-            el.innerHTML = data.body.replace(/\n/g, '<br>');
+            let tipHtml = marked.parse(data.body);
+            tipHtml = tipHtml.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
+              try {
+                const span = document.createElement('span');
+                katex.render(formula.trim(), span, { throwOnError: false });
+                return span.innerHTML;
+              } catch (e) {
+                return `<code>${formula}</code>`;
+              }
+            });
+            el.innerHTML = tipHtml;
             break;
 
           case 'progress':
@@ -715,6 +726,72 @@
         '**确认提交？**',
         '提交后将无法修改答案',
         '> 确认 | 取消',
+        '<!-- /card -->',
+      ],
+      complex: [
+        '下面是一个包含复杂 Markdown 内容的卡片测试：',
+        '',
+        '<!-- card:tip:complex_tip -->',
+        '## 复杂内容展示',
+        '',
+        '### 1. 代码块',
+        '',
+        '```python',
+        'def fibonacci(n):',
+        '    if n <= 1:',
+        '        return n',
+        '    return fibonacci(n-1) + fibonacci(n-2)',
+        '',
+        'print(fibonacci(10))',
+        '```',
+        '',
+        '### 2. 数学公式',
+        '',
+        '欧拉公式：$$ e^{i\\pi} + 1 = 0 $$',
+        '',
+        '泰勒展开：$$ e^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!} $$',
+        '',
+        '### 3. 图片',
+        '',
+        '![Python Logo](https://www.python.org/static/community_logos/python-logo-master-v3-TM-flattened.png)',
+        '',
+        '### 4. 嵌套列表',
+        '',
+        '- 编程语言',
+        '  - Python',
+        '    - 数据科学',
+        '    - Web开发',
+        '  - JavaScript',
+        '    - 前端开发',
+        '    - Node.js',
+        '',
+        '### 5. 表格',
+        '',
+        '| 语言 | 用途 | 流行度 |',
+        '|------|------|--------|',
+        '| Python | 数据科学 | ⭐⭐⭐⭐⭐ |',
+        '| JavaScript | Web开发 | ⭐⭐⭐⭐⭐ |',
+        '| Rust | 系统编程 | ⭐⭐⭐ |',
+        '',
+        '### 6. 引用',
+        '',
+        '> 生活不止眼前的苟且，还有诗和远方。',
+        '',
+        '### 7. 行内代码',
+        '',
+        '使用 `pip install numpy` 安装库。',
+        '<!-- /card -->',
+        '',
+        '<!-- card:choice:complex_q -->',
+        '以下哪个是 Python 的正确安装命令？',
+        '- A. `npm install python`',
+        '- B. `pip install python`',
+        '- C. `apt-get install python3`',
+        '- D. `brew install python`',
+        '<!-- /card -->',
+        '',
+        '<!-- card:submit:complex_submit -->',
+        '提交答案',
         '<!-- /card -->',
       ],
     };
