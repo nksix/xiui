@@ -377,10 +377,8 @@
         this.contentEl = messageEl.querySelector('.content');
       }
 
-      _renderText(buffer, inCard) {
-        if (!buffer.trim()) return;
-        
-        let html = marked.parse(buffer);
+      _renderMarkdown(text) {
+        let html = marked.parse(text);
         html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
           try {
             const span = document.createElement('span');
@@ -390,6 +388,13 @@
             return `<code>${formula}</code>`;
           }
         });
+        return html.trim();
+      }
+
+      _renderText(buffer, inCard) {
+        if (!buffer.trim()) return;
+        
+        const html = this._renderMarkdown(buffer);
 
         if (inCard) {
           if (!this.cardPreviewEl) {
@@ -431,8 +436,8 @@
 
         switch (card.type) {
           case 'choice':
-            el.innerHTML = `<p><strong>${data.question}</strong></p>
-              ${data.options.map(o => `<span class="option" data-id="${o.id}">${o.id}. ${o.label}</span>`).join('')}`;
+            el.innerHTML = `${this._renderMarkdown(data.question)}
+              ${data.options.map(o => `<span class="option" data-id="${o.id}">${o.id}. ${this._renderMarkdown(o.label).replace(/<p>/g, '').replace(/<\/p>/g, '')}</span>`).join('')}`;
             el.querySelectorAll('.option').forEach(opt => {
               opt.addEventListener('click', () => {
                 el.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
@@ -443,26 +448,16 @@
             break;
 
           case 'tip':
-            let tipHtml = marked.parse(data.body);
-            tipHtml = tipHtml.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
-              try {
-                const span = document.createElement('span');
-                katex.render(formula.trim(), span, { throwOnError: false });
-                return span.innerHTML;
-              } catch (e) {
-                return `<code>${formula}</code>`;
-              }
-            });
-            el.innerHTML = tipHtml;
+            el.innerHTML = this._renderMarkdown(data.body);
             break;
 
           case 'progress':
-            el.innerHTML = `<p><strong>${data.title}</strong> ${data.label}</p>
+            el.innerHTML = `${this._renderMarkdown(data.title + ' ' + data.label)}
               <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
             break;
 
           case 'input':
-            el.innerHTML = `<p><strong>${data.title}</strong></p>
+            el.innerHTML = `${this._renderMarkdown(data.title)}
               <input type="text" class="card-input" placeholder="${data.placeholder || ''}" data-card-id="${card.id}">`;
             break;
 
@@ -476,8 +471,8 @@
             break;
 
           case 'confirm':
-            el.innerHTML = `<p><strong>${data.title}</strong></p>
-              <p>${data.description}</p>
+            el.innerHTML = `${this._renderMarkdown(data.title)}
+              ${this._renderMarkdown(data.description)}
               <div class="confirm-buttons">
                 <button class="btn-confirm">${data.confirmLabel || '确认'}</button>
                 <button class="btn-cancel">${data.cancelLabel || '取消'}</button>
@@ -485,7 +480,7 @@
             break;
 
           default:
-            el.innerHTML = `<p>${card.lines.join('<br>')}</p>`;
+            el.innerHTML = this._renderMarkdown(card.lines.join('\n'));
             break;
         }
 
@@ -591,7 +586,7 @@
         '',
         '<!-- card:choice:c1 -->',
         '下面哪个是可变类型？',
-        '- A. 整数 int',
+        '- A. 整数 int $$ a^2+b^2=c^2 $$',
         '- B. 字符串 str',
         '- C. 列表 list',
         '- D. 元组 tuple',
