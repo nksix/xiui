@@ -1,294 +1,285 @@
-# XIUI - Markdown 生成式 UI 协议
+# XIUI
 
-> 基于 Markdown 的流式渲染 UI 协议，让 AI 模型输出实时可交互界面。
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
----
-
-## 快速预览
-
-模型输出一段 Markdown + 卡片，前端实时解析渲染为可交互组件：
-
-```markdown
-今天我们来学习 Python 的**可变类型**。
-
-<!-- card:choice:c1 -->
-下面哪个是可变类型？
-- A. 整数 int
-- B. 字符串 str
-- C. 列表 list
-- D. 元组 tuple
-<!-- /card -->
-
-<!-- card:tip:t1 -->
-> 💡 可变类型可以在原地修改，不可变类型每次修改都会创建新对象。
-<!-- /card -->
-
-<!-- card:progress:p1 -->
-**学习进度** 50% (1/2)
-<!-- /card -->
-
-<!-- card:submit:s1 -->
-提交答案
-<!-- /card -->
-```
-
-前端渲染效果：
-
-- 📝 普通文本 → Markdown 格式化渲染
-- 🎯 选择题卡片 → 可点击选项，自动收集选择
-- 💡 提示卡片 → 高亮引用块展示
-- 📊 进度卡片 → 进度条动画
-- 🚀 提交按钮 → 批量校验并提交
-
----
-
-## 核心特性
-
-- **字符级别流式渲染** — 逐字符解析，实时渲染，打字机效果流畅自然
-- **Markdown 原生** — 卡片内容用标准 Markdown，不引入新语法
-- **优雅降级** — HTML 注释标签自动隐藏，不解析时看到纯 Markdown
-- **零依赖** — 纯 JavaScript ES Module，无框架依赖
-- **多卡片支持** — choice / tip / input / progress / summary / confirm / submit
-- **批次提交** — 交互卡片通过 submit 整批提交，前端校验
-- **跨模型兼容** — 与模型无关，OpenAI / Claude / Gemini 均可使用
-
----
+聊天流式 UI SDK，支持渐进式渲染 Markdown 和交互式卡片。
 
 ## 快速开始
 
-### 浏览器直接使用
-
 ```html
 <script type="module">
-  import { Parser, Renderer } from './src/index.js';
-  
-  class MyRenderer extends Renderer {
-    onChar(char, textBuffer, inCard) {
-      // 字符级别渲染回调
-      this.renderText(textBuffer);
+import { XIUIChat } from 'xiui';
+
+const chat = new XIUIChat({
+  cards: {
+    choice: {
+      render(card, el) {
+        el.innerHTML = card.data.question + card.data.options.map(o =>
+          `<span data-id="${o.id}">${o.label}</span>`
+        ).join('');
+      }
     }
-    
-    onCardStart(type, id) {
-      // 卡片开始，创建预览容器
-    }
-    
-    onCardLine(card, line) {
-      // 卡片内容逐行到达
-    }
-    
-    onCardEnd(card, lines) {
-      // 卡片结束，渲染完整组件
-      const data = Renderer.extractData(card, lines);
-      this.renderCard(card.type, data);
-    }
-    
-    onSubmitCard(card) {
-      // 渲染提交按钮
-    }
-  }
-  
-  const renderer = new MyRenderer();
-  const parser = new Parser(renderer);
-  
-  // 逐字符喂入模型输出
-  for (const char of modelOutput) {
-    parser.feedChar(char);
-  }
-  parser.flush();
+  },
+  onText: text => { /* 文本更新 */ },
+  onCard: (card, el) => { /* 卡片就绪 */ }
+});
+
+chat.feed('```card:choice:c1\n题目？\n- A. 选项A\n```');
+chat.flush();
 </script>
 ```
 
-### 运行示例
+## 协议格式
 
-```bash
-# 启动本地服务器
-python3 -m http.server 8080
-
-# 打开浏览器访问
-open http://localhost:8080/examples/basic.html
-```
-
----
-
-## 协议语法
-
-### 卡片格式
+使用 fenced code block 定义卡片：
 
 ```markdown
-<!-- card:类型:ID -->
-卡片内容（标准 Markdown）
-<!-- /card -->
+```card:type:id
+内容行1
+内容行2
+```
 ```
 
-### 支持的卡片类型
+**参数说明**：
+- `type` — 卡片类型，如 `choice`, `input`, `poll`，决定使用哪个插件渲染
+- `id` — 卡片唯一标识，如 `c1`, `p1`，用于跟踪值和提交数据
 
-| 类型 | 用途 | 示例 |
+**示例**：
+
+```markdown
+```card:choice:c1
+哪个是可变类型？
+- A. 整数 int
+- B. 字符串 str
+- C. 列表 list
+```
+```
+
+## XIUIChat
+
+核心聊天类，每个实例是一个独立的 **session**，管理本次对话的所有状态。
+
+```javascript
+const chat = new XIUIChat({
+  md: markdownitInstance,    // 可选，用于批量模式渲染
+  cards: { ... },            // 卡片插件注册
+  onText: (text) => {},      // 文本流式更新
+  onCardBegin: (type, id) => {},   // 卡片开始 → 骨架屏
+  onCardUpdate: (text) => {},      // 卡片内容预览
+  onCard: (card, el) => {},        // 卡片就绪（el 已渲染）
+  onDone: () => {},                // 流结束
+  onEvent: (card, type, detail) => {}  // 卡片事件
+});
+
+chat.feed(text);   // 流式喂入
+chat.flush();      // 刷新并结束
+chat.render(text); // 批量渲染返回 HTML
+chat.mount(el, text); // 批量渲染到容器
+```
+
+### Session 状态管理
+
+每个 `XIUIChat` 实例自动管理以下状态：
+
+```javascript
+chat.setValue('cardId', 'value');   // 设置卡片值
+chat.getValue('cardId');            // 获取卡片值
+chat.getAllValues();                // 获取所有卡片值
+
+chat.getCards();                    // 获取所有卡片
+chat.getCards('choice');            // 获取指定类型的卡片
+
+chat.validate();                    // { valid: true/false, missing: [] }
+chat.submit();                      // { success, data, cards }
+chat.isSubmitted();                 // 是否已提交
+chat.reset();                       // 重置 session
+```
+
+### card 对象
+
+传递给 `render` 和 `event` 的卡片对象：
+
+```javascript
+card = {
+  type: 'choice',    // ← 从协议 ```card:choice:c1 解析
+  id: 'c1',          // ← 从协议 ```card:choice:c1 解析
+  data: { ... },     // ← parse() 返回的结构化数据
+  attrs: { ... },    // ← 卡片属性 @key:val
+  lines: [...],      // ← 原始行内容
+  text: '...',       // ← 原始文本
+  
+  setValue(value)    // 设置当前卡片的值
+  getValue()         // 获取当前卡片的值
+  trigger(type, detail) // 触发事件
+};
+```
+
+**数据来源总结**：
+
+| 字段 | 来源 | 说明 |
 |------|------|------|
-| `choice` | 选择题 | 单选/多选题目 |
-| `tip` | 提示信息 | 知识点讲解 |
-| `input` | 文本输入 | 表单填写 |
-| `progress` | 进度展示 | 学习进度 |
-| `summary` | 总结表格 | 数据汇总 |
-| `confirm` | 确认弹窗 | 操作确认 |
-| `submit` | 提交按钮 | 批量提交 |
+| `type` | 协议 ````card:type:id```` | 卡片类型 |
+| `id` | 协议 ````card:type:id```` | 卡片唯一标识 |
+| `data` | 插件 `parse(lines)` | 解析后的结构化数据 |
+| `value` | 用户交互 `setValue()` | 用户设置的值 |
 
-### 交互提交
+## XIUIPlugin（插件基类）
 
-用户操作卡片后，前端收集并提交：
+通过继承基类实现自定义卡片，三个方法形成完整的数据闭环：
 
-```json
-{
-  "submit_id": "s1",
-  "cards": {
-    "c1": "C",
-    "i1": "用户输入内容",
-    "confirm1": "yes"
+```
+协议内容 → parse(lines) → card.data → render(card, el) → DOM事件 → setValue → submit()
+```
+
+### 完整示例：自定义投票卡片
+
+**步骤 1：定义协议**
+
+```markdown
+```card:poll:p1
+**今天吃什么？**
+- 🍔 汉堡
+- 🍕 披萨
+- 🍜 拉面
+```
+```
+
+**步骤 2：实现插件**
+
+```javascript
+import { XIUIPlugin } from 'xiui';
+
+class PollPlugin extends XIUIPlugin {
+  parse(lines) {
+    const titleMatch = lines[0]?.match(/\*\*(.+?)\*\*/);
+    const title = titleMatch?.[1] || lines[0] || '';
+    const options = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const m = lines[i].match(/^- (.+?)\s+(.+)$/);
+      if (m) options.push({ emoji: m[1], label: m[2], votes: 0 });
+    }
+    
+    return { title, options };  // ← 返回的数据存入 card.data
+  }
+
+  render(card, el) {
+    const { title, options } = card.data;  // ← 使用 parse 解析的数据
+    
+    el.innerHTML = `
+      <h3>${title}</h3>
+      <div class="poll-options">
+        ${options.map((opt, idx) => `
+          <button data-idx="${idx}">
+            ${opt.emoji} ${opt.label} 
+            <span>${opt.votes}票</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+
+    el.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx);
+        options[idx].votes++;
+        card.setValue(options[idx].votes);  // ← 设置卡片值
+        btn.querySelector('span').textContent = `${options[idx].votes}票`;
+      };
+    });
+  }
+
+  event(card, type, detail) {
+    // type: 事件类型（如 'click', 'change'）
+    // detail: 事件详情，包含 oldValue, newValue
+    console.log(`[${card.id}] ${type}: ${detail.oldValue} → ${detail.newValue}`);
   }
 }
 ```
 
----
-
-## API 文档
-
-### Parser
-
-流式解析器，逐字符喂入模型输出，识别卡片边界并触发渲染回调。
+**步骤 3：注册使用**
 
 ```javascript
-const parser = new Parser(renderer);
-
-parser.feedChar(char);  // 喂入单个字符
-parser.feed(line);      // 喂入一行文本（向后兼容）
-parser.flush();         // 刷新缓冲区剩余内容
-parser.reset();         // 重置解析器状态
+const chat = new XIUIChat({
+  cards: { poll: new PollPlugin() },
+  onEvent: (card, type, detail) => {
+    console.log(`[全局] ${card.id} :: ${type}`, detail);
+  }
+});
 ```
 
-**属性**：
-- `pendingCards` — 当前批次的交互卡片列表
+### 两种注册方式
 
-### Renderer
+**方式一：继承基类（推荐）**
 
-渲染器基类，继承此类实现自定义渲染逻辑。
+完全自定义 `parse`、`render`、`event`：
 
 ```javascript
-class MyRenderer extends Renderer {
-  onChar(char, textBuffer, inCard)    // 字符级别回调（流式渲染）
-  onCardStart(type, id)               // 卡片开始
-  onCardLine(card, line)              // 卡片内容逐行到达
-  onCardEnd(card, lines)              // 卡片结束，渲染完整组件
-  onSubmitCard(card)                  // 检测到 submit 卡片
+class MyCardPlugin extends XIUIPlugin {
+  parse(lines) { return { /* 解析数据 */ }; }
+  render(card, el) { /* 渲染 DOM */ }
+  event(card, type, detail) { /* 处理事件 */ }
 }
+
+const chat = new XIUIChat({
+  cards: { mycard: new MyCardPlugin() }
+});
 ```
 
-**静态方法**：
-- `Renderer.extractData(card, lines)` — 从卡片内容中提取结构化数据
+**方式二：对象字面量（覆盖部分方法）**
 
-### Collector
-
-交互事件收集器，暂存用户操作，批次提交时组装事件。
+复用内置 `parse`，仅自定义 `render`：
 
 ```javascript
-const collector = new Collector();
-
-collector.onChoiceSelect(cardId, optionId)  // 记录选项选择
-collector.onInput(cardId, text)             // 记录文字输入
-collector.onConfirm(cardId, action)         // 记录确认操作
-
-const { valid, result, errors } = collector.build(submitId, pendingCards);
-// valid: true → result 包含提交数据
-// valid: false → errors 包含未操作的卡片列表
+const chat = new XIUIChat({
+  cards: {
+    choice: {
+      render(card, el) {
+        // card.data 已由内置 parse 填充
+        const { question, options } = card.data;
+        el.innerHTML = `<div>${question}</div>`;
+      }
+    }
+  }
+});
 ```
 
----
+## 内置插件
 
-## 示例
+| 插件类 | 卡片类型 | 说明 |
+|--------|----------|------|
+| `ChoicePlugin` | choice | 选择题卡片，解析选项并渲染可点击按钮 |
+| `TipPlugin` | tip | 提示卡片，解析引用内容 |
+| `ProgressPlugin` | progress | 进度卡片，解析标题、百分比、标签 |
+| `SubmitPlugin` | submit | 提交按钮卡片 |
+| `InputPlugin` | input | 输入框卡片，解析标题和占位符 |
+| `SummaryPlugin` | summary | 总结卡片，解析表格内容 |
+| `ConfirmPlugin` | confirm | 确认对话框卡片 |
 
-### 基础示例
+## 示例数据集
 
-[examples/basic.html](examples/basic.html) — 展示所有卡片类型的渲染和交互，包含模拟流式输出、深色主题、LaTeX 公式渲染。
-
-直接用浏览器打开即可运行，支持数据集切换测试。
-
----
+| 名称 | 说明 |
+|------|------|
+| basic | 基础选择题 + 提示 + 进度条 |
+| math | 公式渲染测试 |
+| multiple | 多卡片验证测试 |
+| form | 表单输入测试 |
+| summary | 总结卡片测试 |
+| confirm | 确认对话框测试 |
+| complex | 复杂内容（代码、公式、表格）测试 |
 
 ## 技术栈
 
-- **核心**: JavaScript ES Module (零依赖)
-- **Markdown 渲染**: [marked.js](https://marked.js.org/)
-- **LaTeX 公式**: [KaTeX](https://katex.org/)
-
----
-
-## 浏览器兼容性
-
-- Chrome 89+
-- Firefox 90+
-- Safari 15+
-- Edge 89+
-
----
-
-## 与框架集成
-
-### React
-
-```jsx
-import { Parser, Renderer } from 'xiui';
-
-class ReactRenderer extends Renderer {
-  constructor(setContent) {
-    super();
-    this.setContent = setContent;
-  }
-  
-  onChar(char, textBuffer) {
-    this.setContent(prev => prev + char);
-  }
-  
-  onCardEnd(card, lines) {
-    // 渲染卡片组件
-  }
-}
-```
-
-### Vue
-
-```javascript
-import { Parser, Renderer } from 'xiui';
-
-export default {
-  data() {
-    return { content: '' };
-  },
-  mounted() {
-    const renderer = new Renderer();
-    renderer.onChar = (char, textBuffer) => {
-      this.content = textBuffer;
-    };
-    this.parser = new Parser(renderer);
-  }
-}
-```
-
----
+- **Markdown**: markdown-it
+- **公式**: KaTeX（示例中使用）
+- **语言**: ES Module (ES6+)
 
 ## 开发
 
 ```bash
-git clone https://github.com/nksix/xiui.git
-cd xiui
-
 # 启动开发服务器
 python3 -m http.server 8080
 
-# 打开示例测试
+# 访问示例页面
 open http://localhost:8080/examples/basic.html
 ```
-
----
 
 ## License
 

@@ -2,804 +2,206 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>XIUI 基础示例</title>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <title>XIUI v3</title>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <style>
-    :root {
-      --bg-primary: #0f0f23;
-      --bg-secondary: #1a1a2e;
-      --bg-tertiary: #16213e;
-      --text-primary: #e4e4e7;
-      --text-secondary: #a1a1aa;
-      --accent: #667eea;
-      --accent-hover: #7c8eea;
-      --border: #27272a;
-      --card-bg: #1e1e2f;
-    }
-
+    :root { --bg:#0f0f23; --bg2:#1a1a2e; --bg3:#16213e; --text:#e4e4e7; --mute:#a1a1aa; --accent:#667eea; --border:#27272a; }
     * { box-sizing: border-box; }
+    body { font-family: -apple-system,sans-serif; margin:0; padding:0; background:var(--bg); color:var(--text); min-height:100vh; }
+    .wrap { max-width:800px; margin:0 auto; padding:20px; }
+    .bar { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--bg2); border-radius:12px; margin-bottom:20px; border:1px solid var(--border); }
+    .bar select { flex:1; padding:8px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; outline:none; }
+    .bar select:focus { border-color:var(--accent); }
+    .bar button { padding:8px 20px; background:var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; }
+    .msg { display:flex; gap:12px; margin-bottom:16px; animation:in .3s ease; }
+    @keyframes in { from{opacity:0;transform:translateY(5px)} }
+    .avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:linear-gradient(135deg,var(--accent),#7c3aed); color:#fff; }
+    .bubble { flex:1; min-width:0; background:var(--bg2); padding:12px 16px; border-radius:0 16px 16px 16px; line-height:1.6; font-size:15px; }
+    .bubble p { margin:0 0 8px; } .bubble p:last-child { margin:0; }
+    .bubble pre { background:var(--bg); border-radius:8px; padding:12px; overflow-x:auto; }
+    .bubble code { font-size:13px; }
+    .bubble table { border-collapse:collapse; }
+    .bubble th,.bubble td { padding:6px 12px; border:1px solid var(--border); }
+    .bubble blockquote { border-left:3px solid var(--accent); margin:8px 0; padding:4px 12px; color:var(--mute); }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      min-height: 100vh;
-    }
+    .sk { display:flex; align-items:center; gap:12px; padding:20px; margin:12px 0; border:1px solid var(--border); border-radius:12px; opacity:.5; animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.8} }
+    .sk-l { flex:1; height:12px; background:var(--border); border-radius:4px; }
+    .pv { padding:12px 16px; margin:12px 0; border:1px dashed var(--border); border-radius:12px; line-height:1.6; font-size:14px; }
+    .cursor { display:inline-block; width:2px; height:1.2em; background:var(--accent); vertical-align:text-bottom; animation:blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 20px;
-    }
-
-    .header .logo {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: bold;
-      color: white;
-    }
-
-    .header h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-    }
-
-    .header .badge {
-      margin-left: auto;
-      padding: 4px 12px;
-      background: var(--bg-tertiary);
-      border-radius: 20px;
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    #output {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px 0;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-    }
-
-    #output::-webkit-scrollbar { width: 6px; }
-    #output::-webkit-scrollbar-track { background: transparent; }
-    #output::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-    .message {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
-    .message .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 9999px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-    }
-
-    .message.assistant .avatar {
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-    }
-
-    .message.user .avatar {
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-    }
-
-    .message .content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .message .text {
-      padding: 12px 16px;
-      border-radius: 16px;
-      line-height: 1.6;
-      font-size: 15px;
-    }
-
-    .message.assistant .text {
-      background: var(--bg-secondary);
-      border-radius: 0 16px 16px 16px;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin: 12px 0;
-      transition: all 0.2s ease;
-    }
-
-    .card:hover { border-color: var(--accent); }
-
-    .card-choice .option {
-      display: block;
-      padding: 10px 14px;
-      margin: 6px 0;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-size: 14px;
-    }
-
-    .card-choice .option:hover {
-      background: rgba(102, 126, 234, 0.1);
-      border-color: rgba(102, 126, 234, 0.3);
-    }
-
-    .card-choice .option.selected {
-      background: rgba(102, 126, 234, 0.15);
-      border-color: var(--accent);
-    }
-
-    .card-tip {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(124, 58, 237, 0.1));
-      border-left: 4px solid var(--accent);
-      padding-left: 20px;
-    }
-
-    .card-progress .bar {
-      height: 8px;
-      background: var(--bg-secondary);
-      border-radius: 4px;
-      margin: 8px 0;
-      overflow: hidden;
-    }
-
-    .card-progress .fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), #7c3aed);
-      border-radius: 4px;
-      transition: width 0.5s ease;
-    }
-
-    .card-input {
-      width: 100%;
-      padding: 12px 16px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      font-size: 15px;
-      outline: none;
-    }
-
-    .card-input:focus { border-color: var(--accent); }
-    .card-input::placeholder { color: var(--text-secondary); }
-
-    .summary-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .summary-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .summary-table tr:last-child td {
-      border-bottom: none;
-    }
-
-    .confirm-buttons {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .btn-confirm {
-      flex: 1;
-      padding: 12px 24px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-
-    .btn-cancel {
-      flex: 1;
-      padding: 12px 24px;
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-
-    .btn-submit {
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-      border: none;
-      padding: 12px 32px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      margin: 12px 0;
-    }
-
-    .btn-submit:hover, .btn-confirm:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-    }
-
-    .btn-cancel:hover {
-      background: var(--bg-secondary);
-      border-color: var(--accent);
-    }
-
-    .cursor {
-      display: inline-block;
-      width: 2px;
-      height: 1.2em;
-      background: var(--accent);
-      vertical-align: text-bottom;
-      animation: blink 1s step-end infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-
-    #dataset-selector {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      background: var(--bg-secondary);
-      border-radius: 12px;
-      margin-bottom: 20px;
-      border: 1px solid var(--border);
-    }
-
-    #dataset-selector label { font-size: 14px; color: var(--text-secondary); }
-    #dataset-selector select {
-      flex: 1;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 14px;
-      outline: none;
-    }
-    #dataset-selector select:focus { border-color: var(--accent); }
-    #dataset-selector button {
-      padding: 8px 20px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-    }
+    .card { background:#1e1e2f; border:1px solid var(--border); border-radius:12px; padding:16px; margin:12px 0; }
+    .card-choice .opt, .card-choice .opt-disabled { display:block; padding:10px 14px; margin:6px 0; border:1px solid var(--border); border-radius:8px; font-size:14px; }
+    .card-choice .opt { cursor:pointer; transition:all .2s; }
+    .card-choice .opt:hover { background:rgba(102,126,234,.1); border-color:var(--accent); }
+    .card-choice .opt.sel { background:rgba(102,126,234,.15); border-color:var(--accent); }
+    .card-tip { background:linear-gradient(135deg,rgba(102,126,234,.1),rgba(124,58,237,.1)); border-left:4px solid var(--accent); }
+    .pbar { height:8px; background:var(--bg2); border-radius:4px; margin:8px 0; overflow:hidden; }
+    .pfill { height:100%; background:linear-gradient(90deg,var(--accent),#7c3aed); border-radius:4px; transition:width .5s; }
+    .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
+    .card-input:focus { border-color:var(--accent); }
+    .sum-tbl { width:100%; border-collapse:collapse; }
+    .sum-tbl td { padding:10px 12px; border-bottom:1px solid var(--border); }
+    .sum-tbl tr:last-child td { border-bottom:none; }
+    .bts { display:flex; gap:12px; margin-top:16px; }
+    .btn-pri { flex:1; padding:12px 24px; background:var(--accent); color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; }
+    .btn-ghost { flex:1; padding:12px 24px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:10px; cursor:pointer; font-size:15px; }
+    .btn-submit { background:var(--accent); color:#fff; border:none; padding:12px 32px; border-radius:10px; cursor:pointer; font-size:15px; margin:12px 0; }
+    .disabled { pointer-events:none; opacity:.5; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="logo">X</div>
-      <h1>XIUI 基础示例</h1>
-      <span class="badge">v1.0.0</span>
-    </div>
-    
-    <div id="dataset-selector">
-      <label>选择测试数据集：</label>
-      <select id="dataset-select" value="basic">
-        <option value="basic" selected>基础示例</option>
-        <option value="math">数学公式</option>
-        <option value="multiple">多卡片组合</option>
-        <option value="form">表单输入</option>
-        <option value="summary">总结卡片</option>
-        <option value="confirm">确认弹窗</option>
-        <option value="complex">复杂内容</option>
+  <div class="wrap">
+    <div class="bar">
+      <select id="ds">
+        <option value="basic">基础</option><option value="math">公式</option><option value="multiple">多卡片</option>
+        <option value="form">表单</option><option value="summary">总结</option><option value="confirm">确认</option>
+        <option value="complex">复杂</option>
       </select>
-      <button onclick="loadDataset()">加载</button>
+      <button onclick="run()">加载</button>
     </div>
-    
-    <div id="output"></div>
+    <div id="chat"></div>
   </div>
-
   <script type="module">
-    import { Parser, Renderer, Collector } from '../src/index.js';
+    import { XIUIChat, XIUIPlugin } from '../src/index.js';
 
-    const output = document.getElementById('output');
+    const chatEl = document.getElementById('chat');
+    const md = markdownit({ html: true, breaks: true });
+    function mkmd(t) {
+      let h = md.render(t);
+      h = h.replace(/\$\$(.+?)\$\$/g, (_,f) => { try { const s=document.createElement('span'); katex.render(f.trim(),s,{throwOnError:false}); return s.innerHTML; } catch { return `<code>${f}</code>`; } });
+      return h.trim();
+    }
+    const noP = s => mkmd(s).replace(/<\/?p>/g,'');
 
-    const UI_STATE = {
-      IDLE: 'idle',
-      STREAMING: 'streaming',
-      WAITING_USER: 'waiting_user',
-      SUBMITTED: 'submitted'
+    let chat, bubble, cursor, skeleton, preview;
+
+    const cardDefs = {
+      choice: {
+        render(card, el) {
+          const d = card.data || {};
+          el.innerHTML = mkmd(d.question || '') + (d.options || []).map(o =>
+            `<span class="opt" data-id="${o.id}">${o.id}. ${noP(o.label)}</span>`).join('');
+          el.querySelectorAll('.opt').forEach(o => o.onclick = () => {
+            if (chat.isSubmitted()) return;
+            el.querySelectorAll('.opt').forEach(x => x.classList.remove('sel'));
+            o.classList.add('sel');
+            card.setValue(o.dataset.id);
+          });
+        },
+        event(card, type, detail) {
+          console.log(`[choice] ${card.id}`, detail);
+        }
+      },
+      tip: {
+        render(card, el) { el.innerHTML = mkmd((card.data||{}).body||''); }
+      },
+      progress: {
+        render(card, el) {
+          const d = card.data||{};
+          el.innerHTML = `${mkmd((d.title||'')+' '+(d.label||''))}<div class="pbar"><div class="pfill" style="width:${(d.progress||0)*100}%"></div></div>`;
+        }
+      },
+      input: {
+        render(card, el) {
+          const d = card.data||{};
+          el.innerHTML = `${mkmd(d.title||'')}<input class="card-input" placeholder="${d.placeholder||''}">`;
+          el.querySelector('input').oninput = e => card.setValue(e.target.value);
+        }
+      },
+      submit: {
+        render(card, el) {
+          el.innerHTML = `<button class="btn-submit">${(card.data||{}).label||'提交'}</button>`;
+          el.querySelector('button').onclick = () => {
+            if (chat.isSubmitted()) return;
+            const result = chat.submit();
+            if (!result.success) {
+              if (result.error === 'incomplete') {
+                alert(`请完成所有题目（未完成：${result.missing.join(', ')}）`);
+              }
+              return;
+            }
+            alert(JSON.stringify(result.data,null,2));
+            bubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+          };
+        }
+      },
+      summary: {
+        render(card, el) {
+          el.innerHTML = `<table class="sum-tbl">${((card.data||{}).items||[]).map(i => `<tr><td>${i.label}</td><td>${i.value}</td></tr>`).join('')}</table>`;
+        }
+      },
+      confirm: {
+        render(card, el) {
+          const d = card.data||{};
+          el.innerHTML = `${mkmd(d.title||'')}${mkmd(d.description||'')}<div class="bts"><button class="btn-pri">${d.confirmLabel||'确认'}</button><button class="btn-ghost">${d.cancelLabel||'取消'}</button></div>`;
+          el.querySelector('.btn-pri').onclick = () => card.setValue('confirm');
+          el.querySelector('.btn-ghost').onclick = () => card.setValue('cancel');
+        }
+      }
     };
 
-    class XIUIApp {
-      constructor() {
-        this.state = UI_STATE.IDLE;
-        this.collector = new Collector();
-        this.textBuffer = '';
-        this.contentEl = null;
-        this.streaming = false;
-        this.currentTextEl = null;
-        this.cardPreviewEl = null;
-        this.cardPreviewBuffer = '';
-        this.pendingRender = null;
-      }
+    window.run = () => {
+      const key = document.getElementById('ds').value, lines = datasets[key];
+      if (!lines) return;
+      chatEl.innerHTML = '';
 
-      _createMessage() {
-        const messageEl = document.createElement('div');
-        messageEl.className = 'message assistant';
-        messageEl.innerHTML = '<div class="avatar">AI</div><div class="content"></div>';
-        output.appendChild(messageEl);
-        this.contentEl = messageEl.querySelector('.content');
-      }
+      const msg = document.createElement('div'); msg.className = 'msg';
+      msg.innerHTML = '<div class="avatar">AI</div><div class="bubble"></div>';
+      chatEl.appendChild(msg);
+      bubble = msg.querySelector('.bubble');
+      skeleton = preview = null;
+      cursor = document.createElement('span'); cursor.className = 'cursor'; bubble.appendChild(cursor);
 
-      _renderMarkdown(text) {
-        let html = marked.parse(text);
-        html = html.replace(/\$\$(.*?)\$\$/g, (_, formula) => {
-          try {
-            const span = document.createElement('span');
-            katex.render(formula.trim(), span, { throwOnError: false });
-            return span.innerHTML;
-          } catch (e) {
-            return `<code>${formula}</code>`;
-          }
-        });
-        return html.trim();
-      }
-
-      _renderText(buffer, inCard) {
-        if (!buffer.trim()) return;
-        
-        const html = this._renderMarkdown(buffer);
-
-        if (inCard) {
-          if (!this.cardPreviewEl) {
-            this.cardPreviewEl = document.createElement('div');
-            this.cardPreviewEl.className = 'card-preview';
-            this.contentEl.appendChild(this.cardPreviewEl);
-          }
-          this.cardPreviewEl.innerHTML = html;
-        } else {
-          if (!this.currentTextEl) {
-            this.currentTextEl = document.createElement('div');
-            this.currentTextEl.className = 'text';
-            this.contentEl.appendChild(this.currentTextEl);
-          }
-          this.currentTextEl.innerHTML = html;
+      chat = new XIUIChat({
+        cards: cardDefs,
+        onText: t => {
+          let tb = bubble.querySelector('.text-block');
+          if (!tb) { tb = document.createElement('div'); tb.className = 'text-block'; bubble.insertBefore(tb, cursor); }
+          tb.innerHTML = mkmd(t); chatEl.scrollTop = chatEl.scrollHeight;
+        },
+        onCardBegin: () => {
+          if (preview) { preview.remove(); preview = null; }
+          skeleton = document.createElement('div'); skeleton.className = 'sk'; skeleton.innerHTML = '<div class="sk-l"></div>';
+          bubble.insertBefore(skeleton, cursor);
+          preview = document.createElement('div'); preview.className = 'pv'; preview.style.display = 'none';
+          bubble.insertBefore(preview, cursor);
+        },
+        onCardUpdate: t => {
+          if (!t.trim()||!preview) return;
+          preview.style.display = ''; preview.innerHTML = mkmd(t); chatEl.scrollTop = chatEl.scrollHeight;
+        },
+        onCard: (card, el) => {
+          if (skeleton) { skeleton.remove(); skeleton = null; }
+          if (preview) { preview.remove(); preview = null; }
+          bubble.insertBefore(el, cursor); chatEl.scrollTop = chatEl.scrollHeight;
+        },
+        onDone: () => {
+          if (cursor) cursor.remove(); if (skeleton) skeleton.remove(); if (preview) preview.remove();
+        },
+        onEvent: (card, type, detail) => {
+          console.log(`[Event] ${card.id} :: ${type}`, detail);
         }
-      }
+      });
 
-      _renderCard(card) {
-        if (this.cardPreviewEl) {
-          this.cardPreviewEl.remove();
-          this.cardPreviewEl = null;
-        }
-
-        if (card.type === 'submit') {
-          const btn = document.createElement('button');
-          btn.className = 'btn-submit';
-          btn.textContent = card.attrs.label || '提交';
-          btn.addEventListener('click', () => this._handleSubmit(card));
-          this.contentEl.appendChild(btn);
-          this.state = UI_STATE.WAITING_USER;
-          return;
-        }
-
-        const data = Renderer.extractData(card);
-        const el = document.createElement('div');
-        el.className = `card card-${card.type}`;
-        el.dataset.cardId = card.id;
-
-        switch (card.type) {
-          case 'choice':
-            el.innerHTML = `${this._renderMarkdown(data.question)}
-              ${data.options.map(o => `<span class="option" data-id="${o.id}">${o.id}. ${this._renderMarkdown(o.label).replace(/<p>/g, '').replace(/<\/p>/g, '')}</span>`).join('')}`;
-            el.querySelectorAll('.option').forEach(opt => {
-              opt.addEventListener('click', () => {
-                el.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
-                opt.classList.add('selected');
-                this.collector.onChoiceSelect(card.id, opt.dataset.id);
-              });
-            });
-            break;
-
-          case 'tip':
-            el.innerHTML = this._renderMarkdown(data.body);
-            break;
-
-          case 'progress':
-            el.innerHTML = `${this._renderMarkdown(data.title + ' ' + data.label)}
-              <div class="bar"><div class="fill" style="width:${data.progress * 100}%"></div></div>`;
-            break;
-
-          case 'input':
-            el.innerHTML = `${this._renderMarkdown(data.title)}
-              <input type="text" class="card-input" placeholder="${data.placeholder || ''}" data-card-id="${card.id}">`;
-            break;
-
-          case 'summary':
-            const summaryRows = card.lines.filter(l => l.startsWith('|'));
-            const summaryHtml = summaryRows.map(row => {
-              const cells = row.split('|').filter(Boolean).map(c => `<td>${c.trim()}</td>`).join('');
-              return `<tr>${cells}</tr>`;
-            }).join('');
-            el.innerHTML = `<table class="summary-table">${summaryHtml}</table>`;
-            break;
-
-          case 'confirm':
-            el.innerHTML = `${this._renderMarkdown(data.title)}
-              ${this._renderMarkdown(data.description)}
-              <div class="confirm-buttons">
-                <button class="btn-confirm">${data.confirmLabel || '确认'}</button>
-                <button class="btn-cancel">${data.cancelLabel || '取消'}</button>
-              </div>`;
-            break;
-
-          default:
-            el.innerHTML = this._renderMarkdown(card.lines.join('\n'));
-            break;
-        }
-
-        this.contentEl.appendChild(el);
-      }
-
-      _handleSubmit(card) {
-        const { valid, errors } = this.collector.build(card.id, this.parser.pendingCards);
-        if (!valid) {
-          alert(`请完成所有必填项：${errors.join(', ')}`);
-          return;
-        }
-        alert('提交成功！');
-        this.collector.reset();
-        this.state = UI_STATE.SUBMITTED;
-        this._disableAllCards();
-      }
-
-      _disableAllCards() {
-        this.contentEl.querySelectorAll('.option').forEach(opt => {
-          opt.style.pointerEvents = 'none';
-          opt.style.opacity = '0.5';
-        });
-        this.contentEl.querySelectorAll('.card-input').forEach(input => {
-          input.disabled = true;
-          input.style.opacity = '0.5';
-        });
-        this.contentEl.querySelectorAll('.btn-submit').forEach(btn => {
-          btn.disabled = true;
-          btn.style.opacity = '0.5';
-        });
-        this.contentEl.querySelectorAll('.btn-confirm, .btn-cancel').forEach(btn => {
-          btn.disabled = true;
-          btn.style.opacity = '0.5';
-        });
-      }
-
-      startStreaming(response) {
-        if (this.streaming) return;
-        this.streaming = true;
-        output.innerHTML = '';
-        this.state = UI_STATE.STREAMING;
-        this.textBuffer = '';
-        this.currentTextEl = null;
-        this.cardPreviewEl = null;
-        this.cardPreviewBuffer = '';
-        this.collector.reset();
-
-        this._createMessage();
-        const cursor = document.createElement('span');
-        cursor.className = 'cursor';
-        this.contentEl.appendChild(cursor);
-
-        this.parser = new Parser({
-          onText: (buffer, inCard) => {
-            if (inCard) {
-              this.cardPreviewBuffer = buffer;
-            } else {
-              this.textBuffer = buffer;
-            }
-            this._renderText(inCard ? this.cardPreviewBuffer : this.textBuffer, inCard);
-          },
-          onCard: (card) => {
-            this._renderCard(card);
-          },
-          onStateChange: (from, to) => {
-            if (to === Parser.STATE.CARD) {
-              this.cardPreviewBuffer = '';
-            } else if (to === Parser.STATE.IDLE && from === Parser.STATE.CARD) {
-              this.cardPreviewBuffer = '';
-            }
-          }
-        });
-
-        const fullText = response.join('\n');
-        let charIndex = 0;
-        const typeSpeed = 30;
-
-        const typeNext = () => {
-          if (charIndex >= fullText.length) {
-            this.parser.flush();
-            if (this.pendingRender) cancelAnimationFrame(this.pendingRender);
-            this._renderText(this.textBuffer, false);
-            cursor.remove();
-            this.streaming = false;
-            return;
-          }
-          this.parser.feedChar(fullText[charIndex]);
-          charIndex++;
-          output.scrollTop = output.scrollHeight;
-          setTimeout(typeNext, typeSpeed);
-        };
-
-        setTimeout(typeNext, 500);
-      }
-    }
-
-    const app = new XIUIApp();
+      let i = 0; const text = lines.join('\n');
+      const tick = () => { if (i>=text.length) { chat.flush(); return; } chat.feed(text[i]); i++; setTimeout(tick, 25); };
+      tick();
+    };
 
     const datasets = {
-      basic: [
-        '今天我们来学习 Python 的**可变类型**和**不可变类型**。',
-        '',
-        '<!-- card:choice:c1 -->',
-        '下面哪个是可变类型？',
-        '- A. 整数 int $$ a^2+b^2=c^2 $$',
-        '- B. 字符串 str',
-        '- C. 列表 list',
-        '- D. 元组 tuple',
-        '<!-- /card -->',
-        '',
-        '<!-- card:tip:t1 -->',
-        '> 💡 知识点：可变类型可以在原地修改，不可变类型每次修改都会创建新对象。',
-        '<!-- /card -->',
-        '',
-        '<!-- card:progress:p1 -->',
-        '**学习进度** 50% (1/2)',
-        '<!-- /card -->',
-        '',
-        '<!-- card:submit:s1 -->',
-        '提交答案',
-        '<!-- /card -->',
-      ],
-      math: [
-        '下面是一些常用的数学公式：',
-        '',
-        '**二次方程求根公式：**',
-        '$$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$',
-        '',
-        '**勾股定理：**',
-        '$$ a^2 + b^2 = c^2 $$',
-        '',
-        '**微积分基本定理：**',
-        '$$ \\int_a^b f(x)dx = F(b) - F(a) $$',
-        '',
-        '<!-- card:choice:math1 -->',
-        '如果 a=1, b=2, c=1，方程 x²+2x+1=0 的解是？',
-        '- A. x=1',
-        '- B. x=-1',
-        '- C. x=±1',
-        '- D. 无解',
-        '<!-- /card -->',
-        '',
-        '<!-- card:tip:math_tip -->',
-        '> 💡 判别式 Δ = b² - 4ac，当 Δ=0 时方程有唯一解。',
-        '<!-- /card -->',
-        '',
-        '<!-- card:submit:math_submit -->',
-        '提交答案',
-        '<!-- /card -->',
-      ],
-      multiple: [
-        '欢迎来到综合测试！',
-        '',
-        '<!-- card:choice:q1 -->',
-        '问题1：HTML 是什么的缩写？',
-        '- A. HyperText Markup Language',
-        '- B. HighTech Modern Language',
-        '- C. HyperText Management Language',
-        '- D. High Tech Markup Language',
-        '<!-- /card -->',
-        '',
-        '<!-- card:choice:q2 -->',
-        '问题2：CSS 是什么的缩写？',
-        '- A. Computer Style Sheets',
-        '- B. Creative Style System',
-        '- C. Cascading Style Sheets',
-        '- D. Colorful Style Sheets',
-        '<!-- /card -->',
-        '',
-        '<!-- card:choice:q3 -->',
-        '问题3：JavaScript 是什么类型的语言？',
-        '- A. 编译型',
-        '- B. 解释型',
-        '- C. 静态类型',
-        '- D. 强类型',
-        '<!-- /card -->',
-        '',
-        '<!-- card:tip:multi_tip -->',
-        '> 💡 提示：这三个问题都和 Web 前端开发有关。',
-        '<!-- /card -->',
-        '',
-        '<!-- card:progress:multi_progress -->',
-        '**测试进度** 100% (3/3)',
-        '<!-- /card -->',
-        '',
-        '<!-- card:submit:multi_submit -->',
-        '提交所有答案',
-        '<!-- /card -->',
-      ],
-      form: [
-        '请填写以下表单信息：',
-        '',
-        '<!-- card:input:name -->',
-        '您的姓名',
-        '*(请输入您的真实姓名)*',
-        '<!-- /card -->',
-        '',
-        '<!-- card:input:email -->',
-        '电子邮箱',
-        '*(请输入有效的邮箱地址)*',
-        '<!-- /card -->',
-        '',
-        '<!-- card:choice:gender -->',
-        '性别',
-        '- A. 男',
-        '- B. 女',
-        '- C. 其他',
-        '<!-- /card -->',
-        '',
-        '<!-- card:tip:form_tip -->',
-        '> 💡 所有字段均为必填项，请确保信息准确。',
-        '<!-- /card -->',
-        '',
-        '<!-- card:submit:form_submit -->',
-        '提交表单',
-        '<!-- /card -->',
-      ],
-      summary: [
-        '学习成果总结',
-        '',
-        '<!-- card:summary:s1 -->',
-        '| 学习时长 | 2小时 |',
-        '| 掌握知识点 | 5个 |',
-        '<!-- /card -->',
-        '',
-        '<!-- card:summary:s2 -->',
-        '| 正确率 | 80% |',
-        '| 排名 | 第5名 |',
-        '<!-- /card -->',
-        '',
-        '恭喜你完成了本次学习！',
-      ],
-      confirm: [
-        '您即将提交答案，请确认：',
-        '',
-        '<!-- card:confirm:confirm1 -->',
-        '**确认提交？**',
-        '提交后将无法修改答案',
-        '> 确认 | 取消',
-        '<!-- /card -->',
-      ],
-      complex: [
-        '下面是一个包含复杂 Markdown 内容的卡片测试：',
-        '',
-        '<!-- card:tip:complex_tip -->',
-        '## 复杂内容展示',
-        '',
-        '### 1. 代码块',
-        '',
-        '```python',
-        'def fibonacci(n):',
-        '    if n <= 1:',
-        '        return n',
-        '    return fibonacci(n-1) + fibonacci(n-2)',
-        '',
-        'print(fibonacci(10))',
-        '```',
-        '',
-        '### 2. 数学公式',
-        '',
-        '欧拉公式：$$ e^{i\\pi} + 1 = 0 $$',
-        '',
-        '泰勒展开：$$ e^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!} $$',
-        '',
-        '### 3. 图片',
-        '',
-        '![Python Logo](https://www.python.org/static/community_logos/python-logo-master-v3-TM-flattened.png)',
-        '',
-        '### 4. 嵌套列表',
-        '',
-        '- 编程语言',
-        '  - Python',
-        '    - 数据科学',
-        '    - Web开发',
-        '  - JavaScript',
-        '    - 前端开发',
-        '    - Node.js',
-        '',
-        '### 5. 表格',
-        '',
-        '| 语言 | 用途 | 流行度 |',
-        '|------|------|--------|',
-        '| Python | 数据科学 | ⭐⭐⭐⭐⭐ |',
-        '| JavaScript | Web开发 | ⭐⭐⭐⭐⭐ |',
-        '| Rust | 系统编程 | ⭐⭐⭐ |',
-        '',
-        '### 6. 引用',
-        '',
-        '> 生活不止眼前的苟且，还有诗和远方。',
-        '',
-        '### 7. 行内代码',
-        '',
-        '使用 `pip install numpy` 安装库。',
-        '<!-- /card -->',
-        '',
-        '<!-- card:choice:complex_q -->',
-        '以下哪个是 Python 的正确安装命令？',
-        '- A. `npm install python`',
-        '- B. `pip install python`',
-        '- C. `apt-get install python3`',
-        '- D. `brew install python`',
-        '<!-- /card -->',
-        '',
-        '<!-- card:submit:complex_submit -->',
-        '提交答案',
-        '<!-- /card -->',
-      ],
+      basic: ['今天学习 **可变类型** 和 **不可变类型**。','','```card:choice:c1','哪个是可变类型？','- A. 整数 int $$ a^2+b^2=c^2 $$','- B. 字符串 str','- C. 列表 list','- D. 元组 tuple','```','','```card:tip:t1','> 💡 可变类型可以原地修改，不可变类型每次修改都创建新对象。','```','','```card:progress:p1','**学习进度** 50% (1/2)','```','','```card:submit:s1','提交答案','```'],
+      math: ['常用数学公式：','','**二次求根：** $$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$','','**勾股定理：** $$ a^2 + b^2 = c^2 $$','','```card:choice:m1','方程 $$x^2+2x+1=0$$ 的解？','- A. $$x=1$$','- B. $$x=-1$$','- C. $$x=\\pm 1$$','- D. 无解','```','','```card:tip:mt','> 判别式 $$\\Delta = b^2-4ac$$，$$\\Delta=0$$ 有唯一解。','```','','```card:submit:ms','提交','```'],
+      multiple: ['综合测试：','','```card:choice:q1','HTML 缩写？','- A. HyperText Markup Language','- B. HighTech Modern Language','- C. HyperText Management Language','- D. High Tech Markup Language','```','','```card:choice:q2','CSS 缩写？','- A. Computer Style Sheets','- B. Creative Style System','- C. Cascading Style Sheets','- D. Colorful Style Sheets','```','','```card:choice:q3','JS 类型？','- A. 编译型','- B. 解释型','- C. 静态类型','- D. 强类型','```','','```card:progress:mp','**进度** 100% (3/3)','```','','```card:submit:ms2','提交','```'],
+      form: ['填写表单：','','```card:input:name','姓名','*(真实姓名)*','```','','```card:input:email','邮箱','*(有效邮箱)*','```','','```card:choice:gender','性别','- A. 男','- B. 女','- C. 其他','```','','```card:submit:fs','提交','```'],
+      summary: ['学习总结','','```card:summary:s1','| 时长 | 2小时 |','| 知识点 | 5个 |','```','','```card:summary:s2','| 正确率 | 80% |','| 排名 | 第5名 |','```','','恭喜完成！'],
+      confirm: ['即将提交：','','```card:confirm:cf','**确认提交？**','提交后无法修改','> 确认 | 取消','```'],
+      complex: ['复杂内容卡片：','','```card:tip:cx','## 展示','','### 代码','~~~python','def fib(n):','    if n<=1: return n','    return fib(n-1)+fib(n-2)','~~~','','### 公式','欧拉：$$ e^{i\\pi}+1=0 $$','','### 表格','| 语言 | 用途 |','|------|------|','| Python | 数据科学 |','| JS | Web开发 |','```','','```card:choice:cq','Python 安装命令？','- A. `npm install python`','- B. `pip install python`','- C. `apt-get install python3`','- D. `brew install python`','```','','```card:submit:cs','提交','```']
     };
-
-    window.loadDataset = function() {
-      const select = document.getElementById('dataset-select');
-      const key = select.value;
-      if (datasets[key]) {
-        app.startStreaming(datasets[key]);
-      }
-    };
-
-    app.startStreaming(datasets.basic);
+    run();
   </script>
 </body>
 </html>
