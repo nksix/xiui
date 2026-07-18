@@ -27,8 +27,8 @@
  *   - value（字段值）: 用户交互后设置的值
  */
 
-// 兼容 card:type:id 和 form:formId:type:id
-const CARD_FENCE_RE = /^```(?:card|form):(\w+):(\w+)(?::(\w+))?(?:\[@(.+)\])?\s*$/;
+// 兼容 card:type:id 和 form:formId:type:id，容忍 [@attr] 前的空格
+const CARD_FENCE_RE = /^```(?:card|form):(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+)\])?\s*$/;
 const FENCE_END_RE  = /^```\s*$/;
 
 export class XIUIPlugin {
@@ -220,7 +220,7 @@ export class XIUIChat {
     const codes = container.querySelectorAll('pre code');
     codes.forEach(code => {
       // 兼容 language-card:type:id 和 language-form:formId:type:id
-      const m = code.className.match(/language-(?:card|form):(\w+):(\w+)(?::(\w+))?(?:\[@(.+?)\])?/);
+      const m = code.className.match(/language-(?:card|form):(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+?)\])?/);
       if (!m) return;
       const pre = code.parentElement;
       const rawText = this._dec(code.innerHTML);
@@ -281,7 +281,7 @@ export class XIUIChat {
 
   _emit() {
     if (!this._cardInfo) return;
-    const card = this._build(this._cardInfo.formId, this._cardInfo.type, this._cardInfo.typeId, null, this._cardBuf);
+    const card = this._build(this._cardInfo.formId, this._cardInfo.type, this._cardInfo.typeId, this._cardInfo.attrs, this._cardBuf);
     const el = document.createElement('div');
     el.className = `card card-${card.type}`;
     el.dataset.formId = card.formId;

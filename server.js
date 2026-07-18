@@ -20,52 +20,54 @@ const openai = new OpenAI({
 
 const systemPrompt = `你是学习助手。
 
-**重要：只有需要用户交互时才使用 XIUI 表单。纯信息回复请直接用 Markdown 格式输出，不要使用表单。**
+当你的回复不需要用户操作时，直接用 Markdown 回复（比如：讲解知识、分析代码、回答问题）。
 
-**XIUI 协议格式**（仅用于需要用户选择/输入/确认的场景）：\`\`\`form:表单ID:类型:字段ID\n内容\n\`\`\`
+当需要用户做题或确认时，用下面的格式把交互控件放在 Markdown 代码块内：
 
-**字段类型**：
-- choice：选择题，第一行题目，后续行 A.选项。多选题加 [@multi]
-- input：文本输入，第一行标签，*(占位符)* 可选
-- confirm：确认框（**独立使用，不需要 choice/input**），格式：**标题**，正文描述，>按钮1|按钮2（选择后直接提交）
-- tip：提示信息，纯文本（支持 Markdown）
-- progress：进度条，格式：**标题** 70% (7/10)
-- summary：概览，使用 Markdown 表格
-- submit：提交按钮（**必须跟在 choice/input 后面**）
-
-**ID 命名**：
-- 表单ID：s1/s2/s3...
-- 题目：q1/q2...，输入：i1/i2...，确认：cf1/cf2...，提交：ok
-
-**用户提交格式**：\`\`\`submit\n{"formid":"s1","q1":"A","i1":"内容","cf1":"确认"}\n\`\`\`
-
-**核心规则**：
-1. 纯知识讲解、概念介绍、代码示例等不需要用户互动的场景 → **直接输出 Markdown，不要使用任何 form**
-2. 需要用户填写内容（选择题、输入框）→ 使用 choice/input + submit
-3. 只需要用户确认/二选一（如"继续挑战？""确认提交？"）→ 使用 confirm（**不搭配 choice/input/submit**）
-4. **submit 和 confirm 绝对不能在同一个表单中同时出现**！
-
-**示例1 - 纯文本回复（无交互）**：
-Python 是一种解释型、面向对象的高级编程语言。
-- **特点**：简洁易读、跨平台
-- **常见用途**：Web开发（Django/Flask）、数据科学（NumPy/Pandas）
-
-**示例2 - 选择题（有交互）**：
+**选择题**：
 \`\`\`form:s1:choice:q1
-下面哪个是可变类型？
-A. 整数 int
-B. 列表 list
+Python中哪个是可变类型？
+A. 整数
+B. 列表
 \`\`\`
 \`\`\`form:s1:submit:ok
-提交答案
+提交
 \`\`\`
 
-**示例3 - 确认框（有交互）**：
-\`\`\`form:s2:confirm:cf1
-**还想继续挑战吗？**
-可以再来一道关于集合或字符串的题目。
-> 继续挑战 | 不，谢谢
-\`\`\``;
+**多选题**（加 [@multi]）：
+\`\`\`form:s1:choice:q1[@multi]
+下列哪些是可变类型？（多选）
+A. 列表
+B. 元组
+C. 字典
+D. 集合
+\`\`\`
+\`\`\`form:s1:submit:ok
+提交
+\`\`\`
+
+**填空题**：
+\`\`\`form:s1:input:i1
+请写出结果：
+\`\`\`
+\`\`\`form:s1:submit:ok
+提交
+\`\`\`
+
+**确认操作**：
+\`\`\`form:s1:confirm:cf1
+**要继续吗？**
+再来一道题试试？
+> 继续 | 不了
+\`\`\`
+
+**提示**：
+\`\`\`form:s1:tip:t1
+提醒内容（支持 Markdown）
+\`\`\`
+
+**命名规则**：formId 用 s1/s2/s3...递增，题目用 q1/q2...，填空用 i1/i2...，确认用 cf1/cf2...
+**重要**：choice/input 后面必须跟一个 submit；confirm 独立使用，不跟 submit。`;
 
 function formatCardData(cards) {
   if (!Array.isArray(cards) || cards.length === 0) return '';
@@ -75,15 +77,15 @@ function formatCardData(cards) {
       const labels = values.map(v => {
         const opt = c.options.find(o => o.id === v);
         return opt ? opt.label : v;
-      }).filter(Boolean).join(', ');
-      return `\`\`\`form:${c.formId}:choice:${c.id}\n${c.question}\n用户选择：${c.value}（${labels}）\`\`\``;
+      }).filter(Boolean).join('、');
+      return `[${c.question}] 选择了：${labels}`;
     } else if (c.type === 'input') {
-      return `\`\`\`form:${c.formId}:input:${c.id}\n${c.question}\n用户输入：${c.value}\`\`\``;
+      return `[${c.question}] 填写了：${c.value}`;
     } else if (c.type === 'confirm') {
-      return `\`\`\`form:${c.formId}:confirm:${c.id}\n用户选择：${c.value}\`\`\``;
+      return `[确认] 选择了：${c.value}`;
     }
     return '';
-  }).filter(Boolean).join('\n\n');
+  }).filter(Boolean).join('\n');
 }
 
 app.post('/api/chat', async (req, res) => {

@@ -55,6 +55,10 @@
     .pfill { height:100%; background:linear-gradient(90deg,var(--accent),#7c3aed); border-radius:4px; transition:width .5s; }
     .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
     .card-input:focus { border-color:var(--accent); }
+    .card-invalid { animation:shake .4s; border-color:#ef4444 !important; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+    .card-invalid .opt { border-color:#ef4444; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+    .submitted-tag { display:inline-block; padding:6px 12px; background:rgba(34,197,94,.12); color:#22c55e; border-radius:8px; font-size:13px; font-weight:600; }
     .sum-tbl { width:100%; border-collapse:collapse; }
     .sum-tbl th { padding:8px 12px; text-align:left; font-weight:600; color:var(--mute); font-size:13px; border-bottom:2px solid var(--border); }
     .sum-tbl td { padding:10px 12px; border-bottom:1px solid var(--border); }
@@ -189,14 +193,20 @@
             const formId = card.formId;
             const result = currentChat.submit(formId);
             if (!result.success) {
+              // 高亮未完成的必填字段
+              el.closest('.bubble').querySelectorAll('.card-invalid').forEach(x => x.classList.remove('card-invalid'));
               if (result.error === 'incomplete') {
-                alert(`请完成所有题目（未完成：${result.missing.join(', ')}）`);
+                result.missing.forEach(id => {
+                  const cardEl = el.closest('.bubble').querySelector(`[data-typeid="${id}"]`);
+                  if (cardEl) cardEl.classList.add('card-invalid');
+                });
               }
               return;
             }
+            // 禁用所有交互元素 & 显示已提交
             currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
-            const submitMsg = `\`\`\`submit\n${JSON.stringify(result.data)}\n\`\`\``;
-            await callAI(submitMsg, result.cards);
+            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
+            await callAI('用户提交了答案', result.cards);
           };
         }
       },
@@ -220,22 +230,22 @@
             if (currentChat.isSubmitted()) return;
             card.setValue(d.confirmLabel||'confirm');
             currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
             const formId = card.formId;
             const result = currentChat.submit(formId);
             if (result.success) {
-              const submitMsg = `\`\`\`submit\n${JSON.stringify(result.data)}\n\`\`\``;
-              await callAI(submitMsg, result.cards);
+              await callAI('用户提交了答案', result.cards);
             }
           };
           el.querySelector('.btn-ghost').onclick = async () => { 
             if (currentChat.isSubmitted()) return;
             card.setValue(d.cancelLabel||'cancel');
             currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
             const formId = card.formId;
             const result = currentChat.submit(formId);
             if (result.success) {
-              const submitMsg = `\`\`\`submit\n${JSON.stringify(result.data)}\n\`\`\``;
-              await callAI(submitMsg, result.cards);
+              await callAI('用户提交了答案', result.cards);
             }
           };
         }
@@ -294,6 +304,7 @@
           const pv = bubble.querySelector('.pv');
           if (sk) sk.remove();
           if (pv) pv.remove();
+          el.setAttribute('data-typeid', card.typeId);
           bubble.appendChild(el); scrollToBottom();
         },
         onDone: () => {
@@ -400,6 +411,12 @@
                 statusEl.textContent = '回复中...';
               }
               if (data.done) {
+                if (reasoningEl && !reasoningDone) {
+                  reasoningDone = true;
+                  reasoningEl.open = false;
+                  const summary = reasoningEl.querySelector('summary');
+                  summary.textContent = '思考过程（已完成）';
+                }
                 chat.flush();
               }
             } catch (e) {
