@@ -188,7 +188,7 @@
       });
 
       let i = 0; const text = lines.join('\n');
-      const tick = () => { if (i>=text.length) { chat.flush(); return; } chat.feed(text[i]); i++; setTimeout(tick, 25); };
+      const tick = () => { if (i>=text.length) return; chat.feed(text[i]); i++; setTimeout(tick, 25); };
       tick();
     };
 

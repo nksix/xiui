@@ -41,7 +41,7 @@ class ChoicePlugin extends XIUIPlugin {
     const question = lines[0] || '';
     const options = [];
     for (let i = 1; i < lines.length; i++) {
-      const m = lines[i].match(/^- ([A-D])\.\s*(.+)$/);
+      const m = lines[i].match(/^-?\s*([A-D])\.\s*(.+)$/);
       if (m) options.push({ id: m[1], label: m[2] });
     }
     return { question, options };
@@ -113,6 +113,7 @@ export class XIUIChat {
     this._onCard = opts.onCard;
     this._onDone = opts.onDone;
     this._onEvent = opts.onEvent;
+    this._autoFlush = opts.autoFlush !== undefined ? opts.autoFlush : 2000;
     this._plugins = {};
     this._mergePlugins(opts.cards || {});
     this.reset();
@@ -162,10 +163,20 @@ export class XIUIChat {
   }
 
   feed(text) {
+    if (this._flushTimer) clearTimeout(this._flushTimer);
     for (const ch of text) this._feedChar(ch);
+    if (this._autoFlush > 0) {
+      this._flushTimer = setTimeout(() => this.flush(), this._autoFlush);
+    }
+  }
+
+  send(text) {
+    this.feed(text);
+    if (!this._autoFlush) this.flush();
   }
 
   flush() {
+    if (this._flushTimer) { clearTimeout(this._flushTimer); this._flushTimer = null; }
     if (this._lineBuf && this._state === 'card') {
       if (FENCE_END_RE.test(this._lineBuf)) {
         this._lineBuf = '';
@@ -307,7 +318,29 @@ export class XIUIChat {
     const { valid, missing } = this.validate();
     if (!valid) return { success: false, error: 'incomplete', missing };
     this._submitted = true;
-    return { success: true, data: this.getAllValues(), cards: this.getCards() };
+    const result = [];
+    let humanReadable = '';
+    for (const card of this._cards) {
+      const value = this.getValue(card.id);
+      if (value !== undefined && value !== null) {
+        const item = {
+          id: card.id,
+          type: card.type,
+          value,
+          question: card.data.question || card.data.title || card.data.body || '',
+          options: card.data.options || []
+        };
+        result.push(item);
+        
+        if (item.type === 'choice') {
+          const selectedOpt = item.options.find(o => o.id === value);
+          humanReadable += `- [选择题] ${item.question}\n  用户选择：${value}${selectedOpt ? `（${selectedOpt.label}）` : ''}\n`;
+        } else if (item.type === 'input') {
+          humanReadable += `- [输入框] ${item.question}\n  用户输入：${value}\n`;
+        }
+      }
+    }
+    return { success: true, data: this.getAllValues(), cards: result, summary: humanReadable };
   }
 
   isSubmitted() {

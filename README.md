@@ -61,6 +61,7 @@ chat.flush();
 const chat = new XIUIChat({
   md: markdownitInstance,    // 可选，用于批量模式渲染
   cards: { ... },            // 卡片插件注册
+  autoFlush: 2000,           // 空闲自动结束（毫秒），0 为禁用
   onText: (text) => {},      // 文本流式更新
   onCardBegin: (type, id) => {},   // 卡片开始 → 骨架屏
   onCardUpdate: (text) => {},      // 卡片内容预览
@@ -69,8 +70,9 @@ const chat = new XIUIChat({
   onEvent: (card, type, detail) => {}  // 卡片事件
 });
 
-chat.feed(text);   // 流式喂入
-chat.flush();      // 刷新并结束
+chat.feed(text);   // 流式喂入（自动 flush）
+chat.send(text);   // 立即发送并 flush（当 autoFlush=0 时）
+chat.flush();      // 手动结束流
 chat.render(text); // 批量渲染返回 HTML
 chat.mount(el, text); // 批量渲染到容器
 ```
