@@ -29,27 +29,49 @@ chat.flush();
 
 ## 协议格式
 
-使用 fenced code block 定义卡片：
+使用 fenced code block 定义卡片，支持两种格式：
 
+**标准格式（推荐）**：
 ```markdown
-```card:type:id
-内容行1
-内容行2
+```form:表单ID:类型:字段ID[@属性]
+内容
 ```
 ```
 
-**参数说明**：
-- `type` — 卡片类型，如 `choice`, `input`, `poll`，决定使用哪个插件渲染
-- `id` — 卡片唯一标识，如 `c1`, `p1`，用于跟踪值和提交数据
+**兼容格式**：
+```markdown
+```card:类型:字段ID
+内容
+```
+```
+
+| 格式 | 参数 | 说明 |
+|------|------|------|
+| 标准 | `form:formId:type:typeId` | formId 汇聚同一表单，typeId 唯一标识字段 |
+| 兼容 | `card:type:typeId` | formId 自动设为 `default`，兼容旧写法 |
+
+**属性语法**：在字段 ID 后追加 `[@attr]` 或 `[@key:val]`，多个属性用 `@` 连接：
+- `[@multi]` — 标记为多选（choice 专用），等价于 `{multi: true}`
+- `[@multi@min:1]` — 多选且最少选1项
 
 **示例**：
 
 ```markdown
+标准格式（多选题）：
+```form:s1:choice:q2[@multi]
+下列哪些是可变类型？（多选）
+A. 列表
+B. 字符串
+C. 字典
+D. 元组
+```
+
+兼容格式（默认 formId='default'）：
 ```card:choice:c1
 哪个是可变类型？
-- A. 整数 int
-- B. 字符串 str
-- C. 列表 list
+A. 整数 int
+B. 字符串 str
+C. 列表 list
 ```
 ```
 
@@ -63,7 +85,7 @@ const chat = new XIUIChat({
   cards: { ... },            // 卡片插件注册
   autoFlush: 2000,           // 空闲自动结束（毫秒），0 为禁用
   onText: (text) => {},      // 文本流式更新
-  onCardBegin: (type, id) => {},   // 卡片开始 → 骨架屏
+  onCardBegin: (formId, type, typeId) => {},   // 卡片开始 → 骨架屏
   onCardUpdate: (text) => {},      // 卡片内容预览
   onCard: (card, el) => {},        // 卡片就绪（el 已渲染）
   onDone: () => {},                // 流结束
@@ -82,16 +104,18 @@ chat.mount(el, text); // 批量渲染到容器
 每个 `XIUIChat` 实例自动管理以下状态：
 
 ```javascript
-chat.setValue('cardId', 'value');   // 设置卡片值
-chat.getValue('cardId');            // 获取卡片值
-chat.getAllValues();                // 获取所有卡片值
+chat.setValue('typeId', 'value');   // 设置字段值（key 为 typeId）
+chat.getValue('typeId');            // 获取字段值
+chat.getAllValues();                // 获取所有字段值
 
 chat.getCards();                    // 获取所有卡片
 chat.getCards('choice');            // 获取指定类型的卡片
 
-chat.validate();                    // { valid: true/false, missing: [] }
-chat.submit();                      // { success, data, cards }
+chat.validate();                    // 校验必填字段 { valid, missing }
+chat.submit();                      // 提交表单 { success, data, cards }
+chat.submit('s1');                  // 提交指定 formId 的表单
 chat.isSubmitted();                 // 是否已提交
+chat.isSubmitted('s1');             // 指定 formId 是否已提交
 chat.reset();                       // 重置 session
 ```
 
@@ -101,12 +125,13 @@ chat.reset();                       // 重置 session
 
 ```javascript
 card = {
-  type: 'choice',    // ← 从协议 ```card:choice:c1 解析
-  id: 'c1',          // ← 从协议 ```card:choice:c1 解析
-  data: { ... },     // ← parse() 返回的结构化数据
-  attrs: { ... },    // ← 卡片属性 @key:val
-  lines: [...],      // ← 原始行内容
-  text: '...',       // ← 原始文本
+  formId: 's1',     // ← 表单 ID
+  type: 'choice',   // ← 卡片类型
+  typeId: 'q1',     // ← 字段 ID
+  data: { ... },    // ← parse() 返回的结构化数据
+  attrs: { ... },   // ← 卡片属性，如 {multi: true}
+  lines: [...],     // ← 原始行内容
+  text: '...',      // ← 原始文本
   
   setValue(value)    // 设置当前卡片的值
   getValue()         // 获取当前卡片的值
@@ -118,9 +143,11 @@ card = {
 
 | 字段 | 来源 | 说明 |
 |------|------|------|
-| `type` | 协议 ````card:type:id```` | 卡片类型 |
-| `id` | 协议 ````card:type:id```` | 卡片唯一标识 |
+| `formId` | 协议 `form:formId:type:typeId` | 汇聚同一表单（兼容格式默认 `default`） |
+| `type` | 协议 | 卡片类型 |
+| `typeId` | 协议 | 卡片唯一标识 |
 | `data` | 插件 `parse(lines)` | 解析后的结构化数据 |
+| `attrs` | 协议 `[@multi@key:val]` | 属性，无值标记自动设为 `true` |
 | `value` | 用户交互 `setValue()` | 用户设置的值 |
 
 ## XIUIPlugin（插件基类）
@@ -191,7 +218,7 @@ class PollPlugin extends XIUIPlugin {
   event(card, type, detail) {
     // type: 事件类型（如 'click', 'change'）
     // detail: 事件详情，包含 oldValue, newValue
-    console.log(`[${card.id}] ${type}: ${detail.oldValue} → ${detail.newValue}`);
+    console.log(`[${card.typeId}] ${type}: ${detail.oldValue} → ${detail.newValue}`);
   }
 }
 ```
@@ -247,13 +274,13 @@ const chat = new XIUIChat({
 
 | 插件类 | 卡片类型 | 说明 |
 |--------|----------|------|
-| `ChoicePlugin` | choice | 选择题卡片，解析选项并渲染可点击按钮 |
-| `TipPlugin` | tip | 提示卡片，解析引用内容 |
-| `ProgressPlugin` | progress | 进度卡片，解析标题、百分比、标签 |
-| `SubmitPlugin` | submit | 提交按钮卡片 |
-| `InputPlugin` | input | 输入框卡片，解析标题和占位符 |
-| `SummaryPlugin` | summary | 总结卡片，解析表格内容 |
-| `ConfirmPlugin` | confirm | 确认对话框卡片 |
+| `ChoicePlugin` | choice | 选择题，支持单选/多选（`[@multi]`） |
+| `TipPlugin` | tip | 提示卡片，渲染 Markdown 内容 |
+| `ProgressPlugin` | progress | 进度条，解析标题、百分比、标签 |
+| `SubmitPlugin` | submit | 提交按钮，收集同一 formId 的字段值 |
+| `InputPlugin` | input | 文本输入，解析标签和占位符 |
+| `SummaryPlugin` | summary | 表格展示，自动识别表头（`|---|`）并渲染 `<th>` |
+| `ConfirmPlugin` | confirm | 确认对话框，选择后直接提交 |
 
 ## 示例数据集
 
@@ -272,6 +299,28 @@ const chat = new XIUIChat({
 - **Markdown**: markdown-it
 - **公式**: KaTeX（示例中使用）
 - **语言**: ES Module (ES6+)
+
+## Chat Demo
+
+`examples/chat.html` 是一个完整的 AI 聊天应用示例，包含：
+
+- **流式 SSE**：通过 `server.js` 代理 OpenAI 兼容 API，支持流式输出
+- **思考过程展示**：自动捕获模型的 `reasoning_content`（如 DeepSeek R1），以折叠面板展示思考过程，思考完成自动收起
+- **XIUI 表单交互**：选择题、多选题、输入框、确认框等，用户填写后提交给模型继续对话
+- **System Prompt 控制**：自动注入 XIUI 协议规则，模型按需输出交互表单
+
+### 启动
+
+```bash
+# 配置 .env
+OPENAI_API_KEY=sk-xxx
+OPENAI_API_BASE=https://api.deepseek.com/v1  # 或其他兼容 API
+OPENAI_MODEL=deepseek-reasoner                 # 支持 reasoning 的模型
+
+# 启动
+node server.js
+# 访问 http://localhost:3000/examples/chat.html
+```
 
 ## 开发
 

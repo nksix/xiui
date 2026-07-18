@@ -27,7 +27,8 @@
  *   - value（字段值）: 用户交互后设置的值
  */
 
-const CARD_FENCE_RE = /^```form:(\w+):(\w+):(\w+)(?:\[@(.+)\])?\s*$/;
+// 兼容 card:type:id 和 form:formId:type:id
+const CARD_FENCE_RE = /^```(?:card|form):(\w+):(\w+)(?::(\w+))?(?:\[@(.+)\])?\s*$/;
 const FENCE_END_RE  = /^```\s*$/;
 
 export class XIUIPlugin {
@@ -82,10 +83,30 @@ class InputPlugin extends XIUIPlugin {
 
 class SummaryPlugin extends XIUIPlugin {
   parse(lines) {
-    const rows = lines.filter(l => l.startsWith('|'));
-    const hd = rows[0]?.split('|').filter(Boolean).map(s => s.trim()) || [];
-    const vl = rows[1]?.split('|').filter(Boolean).map(s => s.trim()) || [];
-    return { items: hd.map((h, i) => ({ label: h, value: vl[i] || '' })) };
+    const isSep = l => /^\|[\s\-:]+\|/.test(l);
+    const sepIdx = lines.findIndex(l => isSep(l));
+
+    if (sepIdx > 0 && sepIdx < lines.length - 1) {
+      // 有表头：分隔行之前是表头，之后是数据
+      const headerLines = lines.slice(0, sepIdx).filter(l => l.startsWith('|'));
+      const dataLines = lines.slice(sepIdx + 1).filter(l => l.startsWith('|') && !isSep(l));
+      const headers = headerLines.flatMap(l =>
+        l.split('|').filter(Boolean).map(s => s.trim())
+      );
+      const items = dataLines.map(l => ({
+        cols: l.split('|').filter(Boolean).map(s => s.trim())
+      }));
+      return { headers, items };
+    }
+
+    // 无表头（简洁格式）：每行独立为 label/value 对
+    const rows = lines.filter(l => l.startsWith('|') && !isSep(l));
+    const headers = null;
+    const items = rows.map(r => {
+      const cols = r.split('|').filter(Boolean).map(s => s.trim());
+      return { cols };
+    });
+    return { headers, items };
   }
 }
 
@@ -198,11 +219,14 @@ export class XIUIChat {
   _replaceCardBlocks(container) {
     const codes = container.querySelectorAll('pre code');
     codes.forEach(code => {
-      const m = code.className.match(/language-form:(\w+):(\w+):(\w+)(?:\[@(.+?)\])?/);
+      // 兼容 language-card:type:id 和 language-form:formId:type:id
+      const m = code.className.match(/language-(?:card|form):(\w+):(\w+)(?::(\w+))?(?:\[@(.+?)\])?/);
       if (!m) return;
       const pre = code.parentElement;
       const rawText = this._dec(code.innerHTML);
-      const card = this._build(m[1], m[2], m[3], m[4], rawText);
+      const card = m[3] !== undefined
+        ? this._build(m[1], m[2], m[3], m[4], rawText)
+        : this._build('default', m[1], m[2], m[4], rawText);
       const el = document.createElement('div');
       el.className = `card card-${card.type}`;
       el.dataset.formId = card.formId;
@@ -221,10 +245,17 @@ export class XIUIChat {
         const m = line.match(CARD_FENCE_RE);
         if (m) {
           this._state = 'card';
-          this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
+          if (m[3] !== undefined) {
+            // form:formId:type:id
+            this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
+            if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
+          } else {
+            // card:type:id
+            this._cardInfo = { formId: 'default', type: m[1], typeId: m[2], attrs: this._parseAttrs(m[4]) };
+            if (this._onCardBegin) this._onCardBegin('default', m[1], m[2]);
+          }
           this._cardBuf = '';
           if (this._onText) this._onText(this._textBuf);
-          if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
           return;
         }
         this._textBuf += line + '\n';
@@ -392,8 +423,14 @@ export class XIUIChat {
     if (!s) return {};
     const attrs = {};
     s.split('@').forEach(pair => {
+      if (!pair) return;
       const idx = pair.indexOf(':');
-      if (idx > 0) attrs[pair.slice(0, idx)] = pair.slice(idx + 1);
+      if (idx > 0) {
+        attrs[pair.slice(0, idx)] = pair.slice(idx + 1);
+      } else {
+        // 无值标记，如 [@multi]，直接设为 true
+        attrs[pair] = true;
+      }
     });
     return attrs;
   }

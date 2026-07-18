@@ -39,6 +39,12 @@
     .cursor { display:inline-block; width:2px; height:1.2em; background:var(--accent); vertical-align:text-bottom; animation:blink 1s step-end infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
+    .reasoning-block { margin:8px 0; padding:10px 14px; background:rgba(102,126,234,.06); border-left:3px solid rgba(102,126,234,.3); border-radius:0 8px 8px 0; font-size:13px; }
+    .reasoning-block[open] { border-left-color:var(--accent); }
+    .reasoning-block summary { cursor:pointer; color:var(--mute); font-size:12px; font-weight:500; outline:none; user-select:none; }
+    .reasoning-block summary:hover { color:var(--text); }
+    .reasoning-text { margin-top:8px; color:var(--mute); white-space:pre-wrap; line-height:1.5; font-style:italic; }
+
     .card { background:#1e1e2f; border:1px solid var(--border); border-radius:12px; padding:16px; margin:12px 0; }
     .card-choice .opt, .card-choice .opt-disabled { display:block; padding:10px 14px; margin:6px 0; border:1px solid var(--border); border-radius:8px; font-size:14px; }
     .card-choice .opt { cursor:pointer; transition:all .2s; }
@@ -50,8 +56,9 @@
     .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
     .card-input:focus { border-color:var(--accent); }
     .sum-tbl { width:100%; border-collapse:collapse; }
+    .sum-tbl th { padding:8px 12px; text-align:left; font-weight:600; color:var(--mute); font-size:13px; border-bottom:2px solid var(--border); }
     .sum-tbl td { padding:10px 12px; border-bottom:1px solid var(--border); }
-    .sum-tbl tr:last-child td { border-bottom:none; }
+    .sum-tbl tbody tr:last-child td { border-bottom:none; }
     .bts { display:flex; gap:12px; margin-top:16px; }
     .btn-pri { flex:1; padding:12px 24px; background:var(--accent); color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; }
     .btn-ghost { flex:1; padding:12px 24px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:10px; cursor:pointer; font-size:15px; }
@@ -115,6 +122,11 @@
   tables: true
 });
 
+    // Track reasoning state across feed calls
+    let reasoningEl = null;
+    let reasoningDone = false;
+    let reasoningText = '';
+
     const API_URL = '/api/chat';
     let chatHistory = [];
     let isSending = false;
@@ -140,7 +152,7 @@
             `<span class="opt" data-id="${o.id}">${noP(o.label)}</span>`).join('');
           el.querySelectorAll('.opt').forEach(o => o.onclick = () => {
             if (currentChat.isSubmitted()) return;
-            const isMulti = (d.multi || '').toLowerCase() === 'true';
+            const isMulti = d.multi === true || String(d.multi || '').toLowerCase() === 'true';
             if (isMulti) {
               o.classList.toggle('sel');
               const selected = Array.from(el.querySelectorAll('.opt.sel')).map(x => x.dataset.id).sort();
@@ -190,7 +202,14 @@
       },
       summary: {
         render(card, el) {
-          el.innerHTML = `<table class="sum-tbl">${((card.data||{}).items||[]).map(i => `<tr><td>${i.label}</td><td>${i.value}</td></tr>`).join('')}</table>`;
+          const d = card.data || {};
+          const headers = d.headers;
+          const items = d.items || [];
+          if (headers && headers.length) {
+            el.innerHTML = `<table class="sum-tbl"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${items.map(row => `<tr>${(row.cols||[]).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+          } else {
+            el.innerHTML = `<table class="sum-tbl">${items.map(row => `<tr>${(row.cols||[]).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+          }
         }
       },
       confirm: {
@@ -309,6 +328,11 @@
       const bubble = addAIMsg();
       const chat = createChat(bubble);
 
+      // Reset reasoning state
+      reasoningEl = null;
+      reasoningDone = false;
+      reasoningText = '';
+
       try {
         const response = await fetch(API_URL, {
           method: 'POST',
@@ -342,12 +366,38 @@
             try {
               const data = JSON.parse(line.slice(6));
               if (data.status === 'thinking') {
-                console.log('[XIUI] AI thinking...');
+                statusEl.textContent = '深度思考中...';
+              }
+              if (data.reasoning_content) {
+                reasoningText += data.reasoning_content;
+                if (!reasoningEl) {
+                  reasoningEl = document.createElement('details');
+                  reasoningEl.className = 'reasoning-block';
+                  reasoningEl.innerHTML = '<summary>思考过程</summary><div class="reasoning-text"></div>';
+                  // Insert before any existing children (text-block, cards, etc.)
+                  bubble.insertBefore(reasoningEl, bubble.firstChild);
+                  reasoningEl.open = true;
+                }
+                const rtxt = reasoningEl.querySelector('.reasoning-text');
+                rtxt.textContent += data.reasoning_content;
+                scrollToBottom();
+              }
+              if (data.reasoning_end && reasoningEl) {
+                reasoningDone = true;
+                reasoningEl.open = false;
+                const summary = reasoningEl.querySelector('summary');
+                summary.textContent = '思考过程（已完成）';
               }
               if (data.content) {
-                console.log('[XIUI SSE]', data.content);
+                if (!reasoningDone && reasoningEl) {
+                  reasoningDone = true;
+                  reasoningEl.open = false;
+                  const summary = reasoningEl.querySelector('summary');
+                  summary.textContent = '思考过程（已完成）';
+                }
                 aiResponse += data.content;
                 chat.feed(data.content);
+                statusEl.textContent = '回复中...';
               }
               if (data.done) {
                 chat.flush();
