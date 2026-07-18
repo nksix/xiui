@@ -11,33 +11,36 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('.'));
+app.use(express.static('.', { maxAge: 0, etag: false }));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
 });
 
-const systemPrompt = `你是学习助手。可以通过 Markdown 代码块输出交互表单：\`\`\`form:form_id:类型:type_id\`\`\`...\`\`\`
+const systemPrompt = `你是学习助手。请严格按照 XIUI 协议输出交互内容。
 
-**协议格式**：\`\`\`form:表单ID:类型:字段ID\`\`\`...\`\`\`
+**XIUI 协议格式**：\`\`\`form:表单ID:类型:字段ID\n内容\n\`\`\`
 
 **字段类型**：
-- choice：选择题，格式：第一行题目，后续行 A. 选项
-- input：文本输入，格式：第一行标签，\`*(占位符)*\` 可选
-- confirm：确认框，格式：\`**标题**\`，正文描述，\`> 按钮1 | 按钮2\`
-- tip：提示信息，纯文本
-- progress：进度条，格式：\`**标题** 70% (7/10)\`
-- summary：概览，Markdown 表格
+- choice：选择题，格式：第一行题目，后续行 A.选项。多选题加 [@multi]
+- input：文本输入，格式：第一行标签，*(占位符)* 可选
+- confirm：确认框，格式：**标题**，正文描述，>按钮1|按钮2（选择后直接提交）
+- tip：提示信息，纯文本（支持 Markdown）
+- progress：进度条，格式：**标题** 70% (7/10)
+- summary：概览，使用 Markdown 表格
 - submit：提交按钮，必须跟在交互字段后面
 
 **ID 命名**：
-- form_id：用 s1/s2/s3... 表示每次回复的表单
-- choice：用 q1/q2，input：用 i1/i2，tip：用 t1/t2，submit：用 ok
+- 表单ID：s1/s2/s3...
+- 题目：q1/q2...，输入：i1/i2...，确认：cf1/cf2...，提交：ok
 
-**用户提交格式**：\`\`\`submit\n{"formid":"s1","q1":"A"}\n\`\`\`，其中 formid 是表单 ID，字段 ID 对应你输出的 type_id。
+**用户提交格式**：\`\`\`submit\n{"formid":"s1","q1":"A","q2":"B,C","i1":"内容","cf1":"确认"}\n\`\`\`
 
-**交互流程**：用户提交后你会收到 JSON 格式的字段值。你根据用户的选择继续对话。
+**规则**：
+- 同一表单的字段用相同的表单ID
+- submit 和 confirm 互斥，一个表单只能有一个提交按钮
+- 用户提交后你会收到 JSON 格式的字段值，根据选择继续对话
 
 **示例**：
 \`\`\`form:s1:choice:q1
@@ -100,17 +103,24 @@ app.post('/api/chat', async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
+      'Connection': 'keep-alive',
+      'Transfer-Encoding': 'chunked',
+      'X-Accel-Buffering': 'no'
     });
+
+    res.write(`data: ${JSON.stringify({ status: 'thinking' })}\n\n`);
+    res.flush && res.flush();
 
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
       if (content) {
         res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        res.flush && res.flush();
       }
     }
 
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.flush && res.flush();
     res.end();
   } catch (error) {
     console.error('Chat error:', error);

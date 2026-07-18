@@ -265,10 +265,11 @@ export class XIUIChat {
     const attrs = typeof attrStr === 'string' ? this._parseAttrs(attrStr) : (attrStr || {});
     const lines = text ? text.split('\n').filter(l => Boolean(l)) : [];
     const plugin = this._plugins[type];
-    const data = plugin && typeof plugin.parse === 'function' ? (() => {
+    const parsedData = plugin && typeof plugin.parse === 'function' ? (() => {
       try { return plugin.parse(lines); }
       catch (e) { console.warn(`[XIUI] parse "${type}":`, e); return {}; }
     })() : {};
+    const data = { ...parsedData, ...attrs };
     const card = { formId, type, typeId, attrs, lines, text, data, _md: this.md };
     card.setValue = (value) => this.setValue(typeId, value);
     card.getValue = () => this.getValue(typeId);
@@ -309,7 +310,7 @@ export class XIUIChat {
   }
 
   validate(formId) {
-    const requiredTypes = ['choice', 'input', 'confirm'];
+    const requiredTypes = ['choice', 'input'];
     const missing = [];
     for (const card of this._cards) {
       if (formId && card.formId !== formId) continue;

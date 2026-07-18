@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>XIUI Chat Demo</title>
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js?ts=20260718"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <style>
@@ -27,8 +27,9 @@
     .bubble p { margin:0 0 8px; } .bubble p:last-child { margin:0; }
     .bubble pre { background:var(--bg); border-radius:8px; padding:12px; overflow-x:auto; }
     .bubble code { font-size:13px; }
-    .bubble table { border-collapse:collapse; }
-    .bubble th,.bubble td { padding:6px 12px; border:1px solid var(--border); }
+    .bubble table { border-collapse:collapse; width:100%; margin:12px 0; }
+    .bubble th { background:var(--bg3); font-weight:600; }
+    .bubble th,.bubble td { padding:8px 12px; border:1px solid var(--border); text-align:left; }
     .bubble blockquote { border-left:3px solid var(--accent); margin:8px 0; padding:4px 12px; color:var(--mute); }
 
     .sk { display:flex; align-items:center; gap:12px; padding:20px; margin:12px 0; border:1px solid var(--border); border-radius:12px; opacity:.5; animation:pulse 1.5s infinite; }
@@ -81,14 +82,14 @@
     <div class="input-area">
       <div class="input-bar">
         <textarea id="input" placeholder="输入消息..." rows="1"></textarea>
-        <button id="sendBtn">发送</button>
+        <button id="sendBtn" onclick="console.log('send clicked')">发送</button>
       </div>
       <div class="status" id="status"></div>
       <div class="quick-replies">
-        <button data-msg="介绍一下 Python">介绍一下 Python</button>
-        <button data-msg="出个选择题">出个选择题</button>
-        <button data-msg="综合测试">综合测试</button>
-        <button data-msg="确认对话框">确认对话框</button>
+        <button data-msg="介绍一下 Python" onclick="console.log('quick clicked:', this.dataset.msg)">介绍一下 Python</button>
+        <button data-msg="出个选择题" onclick="console.log('quick clicked:', this.dataset.msg)">出个选择题</button>
+        <button data-msg="综合测试" onclick="console.log('quick clicked:', this.dataset.msg)">综合测试</button>
+        <button data-msg="确认对话框" onclick="console.log('quick clicked:', this.dataset.msg)">确认对话框</button>
       </div>
     </div>
   </div>
@@ -96,11 +97,23 @@
   <script type="module">
     import { XIUIChat, XIUIPlugin } from '../src/index.js';
 
+    console.log('[XIUI] Module loaded');
+    
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('sendBtn');
     const statusEl = document.getElementById('status');
-    const md = markdownit({ html: true, breaks: true, tables: true });
+    
+    console.log('[XIUI] Elements:', { messagesEl, inputEl, sendBtn, statusEl });
+    
+    const md = markdownit({ 
+  html: true, 
+  breaks: true,
+  linkify: true,
+  typographer: true,
+  listStart: 1,
+  tables: true
+});
 
     const API_URL = '/api/chat';
     let chatHistory = [];
@@ -127,9 +140,16 @@
             `<span class="opt" data-id="${o.id}">${noP(o.label)}</span>`).join('');
           el.querySelectorAll('.opt').forEach(o => o.onclick = () => {
             if (currentChat.isSubmitted()) return;
-            el.querySelectorAll('.opt').forEach(x => x.classList.remove('sel'));
-            o.classList.add('sel');
-            card.setValue(o.dataset.id);
+            const isMulti = (d.multi || '').toLowerCase() === 'true';
+            if (isMulti) {
+              o.classList.toggle('sel');
+              const selected = Array.from(el.querySelectorAll('.opt.sel')).map(x => x.dataset.id).sort();
+              card.setValue(selected.join(','));
+            } else {
+              el.querySelectorAll('.opt').forEach(x => x.classList.remove('sel'));
+              o.classList.add('sel');
+              card.setValue(o.dataset.id);
+            }
           });
         }
       },
@@ -177,8 +197,28 @@
         render(card, el) {
           const d = card.data||{};
           el.innerHTML = `${mkmd(d.title||'')}${mkmd(d.description||'')}<div class="bts"><button class="btn-pri">${d.confirmLabel||'确认'}</button><button class="btn-ghost">${d.cancelLabel||'取消'}</button></div>`;
-          el.querySelector('.btn-pri').onclick = () => { card.setValue('confirm'); addUserMsg('确认提交'); };
-          el.querySelector('.btn-ghost').onclick = () => { card.setValue('cancel'); addUserMsg('取消提交'); };
+          el.querySelector('.btn-pri').onclick = async () => { 
+            if (currentChat.isSubmitted()) return;
+            card.setValue(d.confirmLabel||'confirm');
+            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            const formId = card.formId;
+            const result = currentChat.submit(formId);
+            if (result.success) {
+              const submitMsg = `\`\`\`submit\n${JSON.stringify(result.data)}\n\`\`\``;
+              await callAI(submitMsg, result.cards);
+            }
+          };
+          el.querySelector('.btn-ghost').onclick = async () => { 
+            if (currentChat.isSubmitted()) return;
+            card.setValue(d.cancelLabel||'cancel');
+            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            const formId = card.formId;
+            const result = currentChat.submit(formId);
+            if (result.success) {
+              const submitMsg = `\`\`\`submit\n${JSON.stringify(result.data)}\n\`\`\``;
+              await callAI(submitMsg, result.cards);
+            }
+          };
         }
       }
     };
@@ -301,6 +341,9 @@
             if (!line.startsWith('data: ')) continue;
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.status === 'thinking') {
+                console.log('[XIUI] AI thinking...');
+              }
               if (data.content) {
                 console.log('[XIUI SSE]', data.content);
                 aiResponse += data.content;
