@@ -18,50 +18,37 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
 });
 
-const systemPrompt = `你是一个专业的 AI 学习助手。
+const systemPrompt = `你是学习助手。可以通过 Markdown 代码块输出交互表单：\`\`\`form:form_id:类型:type_id\`\`\`...\`\`\`
 
-# XIUI协议 - 前后端交互协议规范
+**协议格式**：\`\`\`form:表单ID:类型:字段ID\`\`\`...\`\`\`
 
-## 协议版本 v1.0
-## 协议描述
+**字段类型**：
+- choice：选择题，格式：第一行题目，后续行 A. 选项
+- input：文本输入，格式：第一行标签，\`*(占位符)*\` 可选
+- confirm：确认框，格式：\`**标题**\`，正文描述，\`> 按钮1 | 按钮2\`
+- tip：提示信息，纯文本
+- progress：进度条，格式：\`**标题** 70% (7/10)\`
+- summary：概览，Markdown 表格
+- submit：提交按钮，必须跟在交互字段后面
 
-XIUI 协议是一种基于卡片的交互协议，用于在前端和后端之间进行通信。协议定义了前端和后端之间的交互方式，包括卡片的格式、事件的触发和处理等。
-协议基于标准的 MARKDOWN 格式，通过特殊格式的卡片来表示不同的交互元素。
+**ID 命名**：
+- form_id：用 s1/s2/s3... 表示每次回复的表单
+- choice：用 q1/q2，input：用 i1/i2，tip：用 t1/t2，submit：用 ok
 
-### AI输出格式
+**用户提交格式**：\`\`\`submit\n{"formid":"s1","q1":"A"}\n\`\`\`，其中 formid 是表单 ID，字段 ID 对应你输出的 type_id。
 
+**交互流程**：用户提交后你会收到 JSON 格式的字段值。你根据用户的选择继续对话。
 
-## 卡片输出格式
-
-当你需要用户选择或输入时，使用以下格式：
-
-选择题：
-\`\`\`card:choice:q1
-题目内容
-A. 选项内容
-B. 选项内容
-C. 选项内容
-D. 选项内容
+**示例**：
+\`\`\`form:s1:choice:q1
+下面哪个是可变类型？
+A. 整数 int
+B. 列表 list
 \`\`\`
 
-输入框：
-\`\`\`card:input:i1
-提示文本
-\`\`\`
-
-提交按钮（必须和选择题/输入框一起使用）：
-\`\`\`card:submit:s1
+\`\`\`form:s1:submit:ok
 提交答案
-\`\`\`
-
-## 规则
-
-1. 选项必须以 A. B. C. D. 开头，不要用 - A. 格式
-2. 每次回答可以有多个选择题和输入框，但最后必须有一个提交按钮
-3. 用户选择后点击提交，系统会将选择内容发送给你
-4. 收到用户选择后，根据选择给出反馈或继续提问
-
-请用自然语言回答，必要时使用卡片。`;
+\`\`\``;
 
 function formatCardData(cards) {
   if (!Array.isArray(cards) || cards.length === 0) return '';
@@ -69,9 +56,11 @@ function formatCardData(cards) {
     if (c.type === 'choice') {
       const selectedOpt = c.options.find(o => o.id === c.value);
       const optLabel = selectedOpt ? selectedOpt.label : '';
-      return `\`\`\`card:choice:${c.id}\n题目：${c.question}\n用户选择：${c.value}（${optLabel}）\`\`\``;
+      return `\`\`\`form:${c.formId}:choice:${c.id}\n${c.question}\n用户选择：${c.value}（${optLabel}）\`\`\``;
     } else if (c.type === 'input') {
-      return `\`\`\`card:input:${c.id}\n标签：${c.question}\n用户输入：${c.value}\`\`\``;
+      return `\`\`\`form:${c.formId}:input:${c.id}\n${c.question}\n用户输入：${c.value}\`\`\``;
+    } else if (c.type === 'confirm') {
+      return `\`\`\`form:${c.formId}:confirm:${c.id}\n用户选择：${c.value}\`\`\``;
     }
     return '';
   }).filter(Boolean).join('\n\n');
@@ -81,16 +70,13 @@ app.post('/api/chat', async (req, res) => {
   const { message, history, cardData } = req.body;
   
   let parsedHistory = [];
-  let parsedCardData = [];
   try {
-    parsedHistory = typeof history === 'string' && history ? JSON.parse(history) : [];
+    parsedHistory = typeof history === 'string' && history ? JSON.parse(history) : (Array.isArray(history) ? history : []);
   } catch (e) { parsedHistory = []; }
-  try {
-    parsedCardData = typeof cardData === 'string' && cardData ? JSON.parse(cardData) : [];
-  } catch (e) { parsedCardData = []; }
 
   try {
     let userMessage = message;
+    const parsedCardData = Array.isArray(cardData) ? cardData : [];
     if (parsedCardData.length > 0) {
       userMessage += '\n\n' + formatCardData(parsedCardData);
     }

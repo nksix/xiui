@@ -1,693 +1,478 @@
 ---
 type: Technical Specification
 title: "XIUI 协议规范"
-description: "XIUI 交互协议完整规范。包含卡片语法、类型定义、交互事件、流式渲染、前端解析、消息管理、前后端交互流程。"
-tags: [xiui, protocol, agent, ui, card-system, markdown, streaming, interaction]
-timestamp: 2026-07-09T11:32:00+08:00
+description: "XIUI 交互协议完整规范。一套基于标准 Markdown 的生成式可交互 UI 协议。"
+tags: [xiui, protocol, agent, ui, form-system, markdown, streaming, interaction]
+timestamp: 2026-07-18T16:00:00+08:00
 ---
 
 # XIUI 协议规范
 
-> 一套基于标准 Markdown 的交互协议。模型输出即 Markdown，前端解析即卡片。不解析也能正常阅读，解析后获得完整交互能力。
+---
+
+## 一、协议要解决的核心问题
+
+### 1.1 当前 AI 交互的痛点
+
+| 问题 | 现状 | 用户体验 |
+|------|------|---------|
+| **渲染等待** | 必须等 AI 输出完毕才能渲染交互组件 | 用户长时间等待，体验差 |
+| **交互单一** | 用户只能通过文字回复，无法选择/输入结构化数据 | AI 无法精确获取用户意图 |
+| **上下文断裂** | 用户提交的结果是文字，AI 难以关联到之前输出的交互组件 | AI 不知道用户操作了哪个选项 |
+| **ID 冲突** | 连续对话中字段 ID 可能重复，无法区分 | 前后端无法正确关联数据 |
+
+### 1.2 XIUI 的解决方案
+
+XIUI 定义了一套**扁平化表单交互协议**，核心思想：
+
+> **AI 每次输出是一个或多个表单（Form），每个表单包含文本内容和交互字段（Field）。用户填写表单后提交，AI 收到结构化的表单结果，继续对话。**
+
+### 1.3 协议价值
+
+- **流式渲染**：AI 输出第一行时就能开始渲染，不需要等待完整输出
+- **结构化交互**：用户通过选择、输入等方式提交数据，AI 精确理解
+- **上下文关联**：通过 `form_id` + `type_id` 双重 ID 关联，避免冲突
+- **优雅降级**：不解析时显示标准 Markdown，完全可读
+- **扁平化设计**：协议格式简单，AI 容易理解和生成
 
 ---
 
-## 〇、协议定位
-
-XIUI 是一种**生成式可交互 UI 协议**。它定义了一套规范，让 AI 模型在流式输出文本的同时，能够生成可交互的 UI 组件，并在用户操作后继续对话。
-
-### 协议边界
-
-XIUI 回答的是「AI 和 UI 之间怎么通信」的问题，不负责「UI 长什么样」：
-
-| 层 | 谁负责 | 协议管什么 |
-|------|--------|-----------|
-| **语义层** | 模型 | 决定出什么卡片、填什么内容、用什么顺序 |
-| **协议层** | XIUI | 卡片边界标记、属性编码、事件回传格式 |
-| **渲染层** | 前端 | 卡片组件实现、布局、样式、响应式 |
-| **交互层** | 前端 + XIUI | 交互事件收集、批次提交、校验规则 |
-
-### 与同类方案的差异
-
-| | XIUI | 纯 JSON A2UI | 传统 Chat UI |
-|---|---|---|---|
-| **输出格式** | Markdown + 注释 | 纯 JSON | 纯文本 |
-| **流式渲染** | 逐行即时渲染 | 必须等完整 JSON | 逐字打字 |
-| **降级能力** | 不解析也能读 | 乱码 | 天然可读 |
-| **模型负担** | 像写 Markdown | 像写代码 | 像说话 |
-| **交互支持** | 10 种卡片 + 批次提交 | 自定义 JSON schema | 无 |
-| **适用场景** | 生成式可交互 UI | API 调用/结构化输出 | 纯文本对话 |
-
-### 什么情况下用 XIUI
-
-- 模型输出需要**同时包含文字和可交互组件**（题、表单、进度、图表）
-- 用户需要**在对话流中直接操作**，而不是跳转到另一个页面
-- 需要**流式渐进渲染**，不能等完整输出才展示
-- 需要**优雅降级**——不支持解析的环境仍能正常阅读
-
-### 什么情况下不用 XIUI
-
-- 纯文本对话，没有交互需求 → 直接 Markdown
-- 交互逻辑复杂、状态管理重 → 原生前端 + API，模型只出数据
-- 高频实时渲染（游戏、动画、协同编辑） → 专业渲染引擎
-- 只需要结构化数据输出 → JSON Schema / function calling
-
----
-
-## 一、设计原则
-
-1. **Markdown 原生** — 卡片内容用标准 Markdown，不引入新语法
-2. **注释做边界** — `<!-- card:类型:id -->` 和 `<!-- /card -->` 标记卡片起止
-3. **优雅降级** — 不解析时 HTML 注释隐藏，用户看到纯 Markdown
-4. **流式友好** — 检测到卡片开始立即出骨架屏，逐行渲染
-5. **批次提交** — 交互卡片通过 `submit_card` 整批提交
-6. **模型只管内容，前端管布局** — 排列、间距、响应式不暴露给模型
-
----
-
-## 二、卡片语法
-
-### 2.1 基本格式
+## 二、交互生命周期
 
 ```
-<!-- card:类型:id -->
-[标准 Markdown 内容]
-<!-- /card -->
-```
-
-### 2.2 属性
-
-属性放在卡片开始标记中，用 `[@key:value]` 包裹，多个属性用 `@` 分隔。属性可选，无属性时省略 `[@...]`：
-
-```
-<!-- card:类型:id[@key:value@key:value] -->
-```
-
-### 2.3 嵌套
-
-容器卡片内嵌套其他卡片，靠 `<!-- /card -->` 配对，前端用栈维护：
-
-```
-<!-- card:section:sec1 -->
-## 标题
-
-<!-- card:summary:s1 -->
-| 指标 | 数值 |
-<!-- /card -->
-
-<!-- /card -->
+┌─────────────────────────────────────────────────────────────────┐
+│                      交互生命周期                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  AI 输出表单              前端渲染                  用户交互     │
+│     │                       │                          │        │
+│     │─── 文本内容 ──────────→│                          │        │
+│     │   "今天学 Python..."   │                          │        │
+│     │                       │                          │        │
+│     │─── 字段定义 ──────────→│                          │        │
+│     │   ```form:s1:choice:q1│──→ 骨架屏                │        │
+│     │   题目内容             │──→ 渲染题目              │        │
+│     │   A. 选项A             │──→ 渲染选项              │        │
+│     │   ```                  │──→ 完成渲染              │        │
+│     │                       │                          │        │
+│     │─── 提交按钮 ──────────→│                          │        │
+│     │   ```form:s1:submit:ok │──→ 渲染提交按钮          │        │
+│     │                       │                          │        │
+│     │                       │←── 用户选择选项 ──────────│        │
+│     │                       │←── 用户点提交 ────────────│        │
+│     │                       │                          │        │
+│     │←─── 表单结果 ──────────│                          │        │
+│     │   ```submit            │                          │        │
+│     │   {"formid":"s1",      │                          │        │
+│     │    "q1":"A","q2":"B"}  │                          │        │
+│     │   ```                  │                          │        │
+│     │                       │                          │        │
+│     │─── 继续输出 ──────────→│                          │        │
+│     │   "回答正确！..."      │                          │        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 三、卡片类型定义
+## 三、协议格式
 
-### 3.1 choice — 选择题
-
-用于出题、确认理解。内容第一行为题目，`- 字母. 文字` 为选项。
+### 3.1 字段定义格式（AI → 前端）
 
 ```
-<!-- card:choice:c1 -->
+```form:form_id:type:type_id
+字段内容
+```
+```
+
+**参数说明**：
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `form_id` | 表单 ID，用于汇聚同一表单的所有字段 | `s1`, `f2`, `exam1` |
+| `type` | 字段类型 | `choice`, `input`, `tip`, `submit` |
+| `type_id` | 字段在表单内的序号 | `q1`, `i1`, `ok` |
+
+### 3.2 输出示例
+
+```markdown
+今天我们来学习 Python 的可变类型。
+
+```form:s1:choice:q1
 下面哪个是可变类型？
-- A. 整数 int
-- B. 字符串 str
-- C. 列表 list
-- D. 元组 tuple
-<!-- /card -->
+A. 整数 int
+B. 字符串 str
+C. 列表 list
+D. 元组 tuple
 ```
 
-**属性**：`@multi:true`（多选） `@optional:true`（可跳过）
+```form:s1:choice:q2
+下面哪个操作会报错？
+A. `list[0] = 10`
+B. `tuple[0] = 10`
+```
 
-**交互**：用户点击选项。单选用 radio，多选用 checkbox。
+```form:s1:submit:ok
+提交答案
+```
+```
 
-**降级**：普通无序列表，完全可读。
+### 3.3 输入协议（前端 → AI）
+
+```markdown
+```submit
+{"formid":"s1","q1":"C","q2":"B"}
+```
+```
+
+### 3.4 核心设计原则
+
+1. **双重 ID 关联**：`form_id` 关联表单，`type_id` 关联字段，避免连续对话中的 ID 冲突
+2. **同一表单汇聚**：相同 `form_id` 的字段会被汇聚到同一个表单中
+3. **JSON 格式提交**：提交时使用简洁的 JSON 格式，包含 `formid` 和所有字段值
+4. **扁平化设计**：协议格式简单，AI 容易理解和生成
 
 ---
 
-### 3.2 tip — 提示
+## 四、字段类型定义
 
-用于知识点讲解、纠错反馈、鼓励。内容用 Markdown 引用块。
+### 4.1 字段类型分类
 
+| 类型 | 分类 | 交互性 | 说明 |
+|------|------|--------|------|
+| choice | 交互字段 | 是 | 选择题 |
+| input | 交互字段 | 是 | 文本输入 |
+| confirm | 交互字段 | 是 | 确认框 |
+| tip | 内容字段 | 否 | 提示信息 |
+| progress | 内容字段 | 否 | 进度条 |
+| summary | 内容字段 | 否 | 概览统计 |
+| submit | 触发器 | 是 | 提交按钮（必须） |
+
+### 4.2 choice — 选择题
+
+**输出格式**：
 ```
-<!-- card:tip:t1 -->
-> 💡 可变类型 vs 不可变类型
-> 可变类型（list、dict）的值可以原地修改；
-> 不可变类型（int、str、tuple）每次操作创建新对象。
-> **判断技巧**：能用 `obj[0] = ...` 修改的就是可变的。
-<!-- /card -->
+```form:s1:choice:q1
+题目内容
+A. 选项A
+B. 选项B
+```
 ```
 
-**属性**：`@icon:bulb|warning|info|success`（默认 bulb）
+**提交值**：选项字母（如 `"A"`、`"B,C"`）
 
-**交互**：无。
+**规则**：
+- 第一行是题目
+- 选项格式：`字母. 文本`
+- 单选：点击选项直接选中
+- 多选：按住 Ctrl/Cmd 多选，提交值用逗号分隔
 
-**降级**：标准引用块，完全可读。
+### 4.3 input — 文本输入
+
+**输出格式**：
+```
+```form:s1:input:i1
+输入提示
+*(占位符文本)*
+```
+```
+
+**提交值**：输入文本（如 `"用户输入的内容"`）
+
+**规则**：
+- 第一行是标签
+- `*(xxx)*` 是占位提示（可选）
+
+### 4.4 confirm — 确认框
+
+**输出格式**：
+```
+```form:s1:confirm:cf1
+**确认标题**
+描述文本
+> 确认 | 取消
+```
+```
+
+**提交值**：按钮文本（如 `"确认"`、`"取消"`）
+
+**规则**：
+- `**标题**` 是确认标题
+- 正文是描述文本
+- `> 确认 | 取消` 定义按钮（用 `|` 分隔）
+
+### 4.5 tip — 提示
+
+**输出格式**：
+```
+```form:s1:tip:t1
+提示内容（支持 Markdown）
+```
+```
+
+**规则**：
+- 纯展示，无交互
+- 内容支持完整 Markdown
+
+### 4.6 progress — 进度条
+
+**输出格式**：
+```
+```form:s1:progress:p1
+**标题** 70% (7/10)
+```
+```
+
+**规则**：
+- `**标题**` 是进度标题
+- `70%` 是进度百分比
+- `(7/10)` 是进度标签（可选）
+
+### 4.7 summary — 概览
+
+**输出格式**：
+```
+```form:s1:summary:sm1
+| 指标 | 数值 |
+|------|------|
+| 学习时长 | 2.5 小时 |
+```
+```
+
+**规则**：
+- 使用 Markdown 表格展示数据
+
+### 4.8 submit — 提交按钮
+
+**输出格式**：
+```
+```form:s1:submit:ok
+提交答案
+```
+```
+
+**规则**：
+- 同一 `form_id` 的交互字段（choice/input/confirm）后面必须跟 submit
+- 用户点击提交后，收集同一 `form_id` 的所有交互字段的值，整批发送
+- 提交前校验：未操作的交互字段需要标红提示
 
 ---
 
-### 3.3 input — 输入
+## 五、ID 命名规范
 
-用于收集文字回答。内容第一行为标题，`*（xxx）*` 为占位提示。
+### 5.1 form_id 命名
 
-```
-<!-- card:input:i1 -->
-用你的话解释可变类型
-*（不超过 100 字）*
-<!-- /card -->
-```
+| 场景 | 命名 | 示例 |
+|------|------|------|
+| 单次问答 | `s1`, `s2`, `s3`... | `s1` |
+| 考试/测验 | `exam1`, `exam2`... | `exam1` |
+| 表单收集 | `form1`, `form2`... | `form1` |
 
-**属性**：`@type:text|code|multiline`（默认 text） `@max:200`
+### 5.2 type_id 命名
 
-**交互**：用户输入文字。
-
-**降级**：显示标题和提示文字，可读但不可交互。
-
----
-
-### 3.4 progress — 进度
-
-用于展示学习进度。
-
-```
-<!-- card:progress:p1 -->
-**Python 函数**  ███████░░░ 70%  7/10 节
-<!-- /card -->
-```
-
-**属性**：`@color:blue|green|orange|red`（默认 blue）
-
-**交互**：无。
-
-**降级**：加粗标题 + 文字描述，可读。
+| 字段类型 | ID 命名 | 示例 | 含义 |
+|---------|---------|------|------|
+| choice | `q1`, `q2`, `q3`... | `q1` | 第 1 题 |
+| input | `i1`, `i2`, `i3`... | `i1` | 第 1 个输入 |
+| tip | `t1`, `t2`, `t3`... | `t1` | 第 1 个提示 |
+| progress | `p1`, `p2`, `p3`... | `p1` | 第 1 个进度条 |
+| confirm | `cf1`, `cf2`... | `cf1` | 第 1 个确认框 |
+| submit | `ok`, `submit`, `next` | `ok` | 提交按钮 |
+| summary | `sm1`, `sm2`... | `sm1` | 第 1 个概览 |
 
 ---
 
-### 3.5 summary — 概览
+## 六、表单校验规则
 
-用于统计数据、关键指标。内容用 Markdown 表格。
+### 6.1 必填规则
 
-```
-<!-- card:summary:s1 -->
-| 今日学习时长 | 2.5 小时 ↑ |
-| 比昨天 | 多 40 分钟 |
-<!-- /card -->
-```
+| 字段类型 | 是否必填 | 校验规则 |
+|---------|---------|---------|
+| choice | 是 | 必须选择至少一个选项 |
+| input | 是 | 输入内容不能为空 |
+| confirm | 是 | 必须选择确认或取消 |
+| tip | 否 | 无校验 |
+| progress | 否 | 无校验 |
+| summary | 否 | 无校验 |
+| submit | 必须 | 无校验（作为触发器） |
 
-**属性**：`@trend:up|down|flat`
+### 6.2 校验流程
 
-**交互**：无。
-
-**降级**：标准表格，完全可读。
-
----
-
-### 3.6 confirm — 确认
-
-用于确认重要操作。`**标题**` 为标题，`> 确认 | 取消` 为按钮。
-
-```
-<!-- card:confirm:cf1 -->
-**确定要跳过这一章吗？**
-
-第 3 章是后续章节的基础，跳过可能影响理解。
-
-> 确定跳过  |  继续学习
-<!-- /card -->
-```
-
-**属性**：`@yes:确认` `@no:取消`
-
-**交互**：用户点击确认或取消。
-
-**降级**：加粗标题 + 引用块，可读。
+1. 用户点击 submit（某个 `form_id`）
+2. 前端遍历该 `form_id` 下的所有交互字段（choice/input/confirm）
+3. 检查每个字段是否有值
+4. 未填写的字段标红提示
+5. 全部填写完成后，收集表单结果发送给 AI
 
 ---
 
-### 3.7 chart — 图表
+## 七、提交格式详解
 
-用于趋势图、对比图。内容用 Markdown 表格 + 斜体说明。
-
-```
-<!-- card:chart:ch1 -->
-| 周一 | 周二 | 周三 | 周四 | 周五 |
-| 1.5 | 2.0 | 0.5 | 2.5 | 1.8 |
-*本周学习时长（小时）*
-<!-- /card -->
-```
-
-**属性**：`@type:bar|line|pie|radar`（默认 bar） `@unit:单位`
-
-**交互**：点击数据点（可选）。
-
-**降级**：标准表格 + 说明文字，完全可读。
-
----
-
-### 3.8 section — 分组（容器）
-
-用于将多张卡片归为一组。
-
-```
-<!-- card:section:sec1 -->
-## 今日学习概览
-
-<!-- card:summary:s1 -->
-| 学习时长 | 2.5 小时 ↑ |
-<!-- /card -->
-
-<!-- card:summary:s2 -->
-| 完成题目 | 12 题 |
-<!-- /card -->
-
-<!-- /card -->
-```
-
-**属性**：无。
-
-**前端渲染**：带标题的卡片分组区域。
-
-**降级**：二级标题 + 表格，可读。
-
----
-
-### 3.9 tab — 选项卡（容器）
-
-每个 `## 标题` 对应一个 tab。
-
-```
-<!-- card:tab:tb1[@default:0] -->
-
-## 已掌握
-
-<!-- card:tip:t1 -->
-> ✓ 变量与数据类型
-<!-- /card -->
-
-## 薄弱点
-
-<!-- card:tip:t2 -->
-> ⚠️ 函数参数传递
-<!-- /card -->
-
-<!-- /card -->
-```
-
-**属性**：`@default:0`（默认选中的 tab 索引）
-
-**交互**：用户切换 tab。
-
-**降级**：连续二级标题 + 引用块，可读。
-
----
-
-### 3.10 submit — 提交（批次触发器）
-
-交互卡片（choice/input/confirm）后面必须跟 submit。前端收到后渲染提交按钮，校验所有交互卡片已操作，整批发送。
-
-```
-<!-- card:submit:s1 -->
-提交
-<!-- /card -->
-```
-
-**属性**：`@label:提交`
-
-**交互**：用户点击提交，触发批次校验和发送。
-
-**降级**：不显示（降级渲染器不处理交互）。
-
----
-
-## 四、交互事件协议
-
-### 4.1 事件收集
-
-前端暂存用户操作：
-
-```javascript
-class InteractionCollector {
-  values = {};  // card_id → value
-
-  onChoiceSelect(cardId, optionId) { this.values[cardId] = optionId; }
-  onInput(cardId, text)          { this.values[cardId] = text; }
-  onConfirm(cardId, action)      { this.values[cardId] = action; }
-}
-```
-
-### 4.2 批次提交
-
-```javascript
-onSubmit(submitId) {
-  const result = { submit_id: submitId, cards: {} };
-  
-  for (const card of this.pendingCards) {
-    const value = this.values[card.id];
-    if (value === undefined && !card.attrs.optional) {
-      highlightError(card.id);  // 未操作 → 标红
-      return;
-    }
-    result.cards[card.id] = value ?? null;
-  }
-  
-  this.pendingCards = [];
-  sendToModel(result);
-}
-```
-
-### 4.3 发送格式
+### 7.1 提交 JSON 结构
 
 ```json
 {
-  "submit_id": "submit_001",
-  "cards": {
-    "c1": "C",
-    "c2": "B",
-    "i1": "列表可以原地修改，元组不行"
-  }
+  "formid": "s1",
+  "q1": "A",
+  "q2": "B,C",
+  "i1": "用户输入的内容",
+  "cf1": "确认"
 }
 ```
 
-单卡片（无 submit_card）：
-```json
-{"c1": "C"}
+### 7.2 字段值类型
+
+| 字段类型 | 值类型 | 示例 |
+|---------|--------|------|
+| choice | string | `"A"` 或 `"A,B"`（多选） |
+| input | string | `"用户输入的内容"` |
+| confirm | string | `"确认"` 或 `"取消"` |
+
+### 7.3 多表单提交
+
+如果一次回复中有多个表单，每个表单独立提交：
+
+```markdown
+```submit
+{"formid":"exam1","q1":"A","q2":"B"}
 ```
 
-**取值规则**：
-- choice：选项字母，如 `"C"`，多选为 `["A", "C"]`
-- input：输入文本
-- confirm：`"yes"` 或 `"no"`
-- 未操作的 optional 卡片：`null`
+```submit
+{"formid":"form1","i1":"张三","i2":"25"}
+```
+```
 
 ---
 
-## 五、流式渲染
+## 八、消息管理
 
-### 5.1 时序
+### 8.1 消息结构
 
 ```
-t+0.0s  "今天学习可变类型——"        → Markdown 流式渲染
-t+0.4s  "<!-- card:choice:c1 -->"   → 骨架屏
-t+0.5s  "下面哪个是可变类型？"       → 渲染标题
-t+0.6s  "- A. 整数 int"             → 渲染选项 A
-t+0.7s  "- B. 字符串 str"           → 渲染选项 B
-t+0.8s  "- C. 列表 list"            → 渲染选项 C
-t+0.9s  "- D. 元组 tuple"           → 渲染选项 D
-t+1.0s  "<!-- /card -->"            → 替换骨架屏
-t+1.1s  "回答正确！🎉"              → 继续 Markdown
-t+1.4s  "<!-- card:submit:s1 -->"   → 渲染提交按钮
-```
-
-### 5.2 解析器
-
-```javascript
-class XIUIParser {
-  stack = [];         // 卡片栈 [{type, id, attrs}]
-  buffer = [];        // 当前卡片内容行
-  pendingCards = [];  // 未提交的交互卡片
-
-  feed(line) {
-    // 卡片开始：<!-- card:类型:id --> 或 <!-- card:类型:id[@key:value@...] -->
-    const start = line.match(/^<!-- card:(\w+):(\w+)(?:\[@(.+)\])? -->$/);
-    if (start) {
-      const [, type, id, attrStr] = start;
-      this.stack.push({ type, id, attrs: this.parseAttrs(attrStr) });
-      this.buffer = [];
-      createSkeleton(type, id);
-      return;
-    }
-
-    // 卡片结束
-    if (line === '<!-- /card -->') {
-      const card = this.stack.pop();
-      renderCard(card, this.buffer);
-      this.buffer = [];
-      if (['choice', 'input', 'confirm'].includes(card.type)) {
-        this.pendingCards.push(card);
-      }
-      if (card.type === 'submit') showSubmitButton(card);
-      return;
-    }
-
-    // 内容行
-    this.buffer.push(line);
-    if (this.stack.length > 0) {
-      streamUpdate(this.stack[this.stack.length - 1], line);
-    } else {
-      streamMarkdown(line);
-    }
-  }
-
-  parseAttrs(s) {
-    if (!s) return {};
-    const a = {};
-    s.split('@').forEach(p => { const [k, ...v] = p.split(':'); if (k) a[k] = v.join(':'); });
-    return a;
-  }
-}
-```
-
-### 5.3 内容解析规则
-
-| 卡片 | 解析规则 |
-|------|----------|
-| choice | 第一行 → question，`- A. xxx` → options |
-| tip | `> 💡 标题` → title，其余行 → body |
-| input | 第一行 → title，`*（xxx）*` → placeholder |
-| progress | `**标题** █████░░░ 70% label` → 提取 |
-| summary | Markdown 表格 → title/value/subtitle |
-| confirm | `**标题**` → title，`> 确认 \| 取消` → 按钮 |
-| chart | 表格 → labels/data，`*说明*` → unit |
-
----
-
-## 六、消息管理
-
-### 6.1 消息数组
-
-```javascript
 messages = [
   { role: "system", content: "你是学习助手..." },
   
   { role: "user", content: "今天学什么？" },
-  { role: "assistant", content: "今天学习 Python。\n\n<!-- card:choice:c1 -->\n..." },
-  { role: "user", content: '{"c1": "C"}' },
-  { role: "assistant", content: "回答正确！\n\n<!-- card:tip:t1 -->\n..." },
+  { role: "assistant", content: "今天学习 Python。\n\n```form:s1:choice:q1\n..." },
+  
+  { role: "user", content: "```submit\n{\"formid\":\"s1\",\"q1\":\"C\"}\n```" },
+  { role: "assistant", content: "回答正确！\n\n```form:s2:tip:t1\n..." },
   
   { role: "user", content: "继续下一个知识点" }
 ];
 ```
 
-### 6.2 消息类型
+### 8.2 消息类型
 
 | 来源 | role | content 格式 |
 |------|------|-------------|
 | 用户文字 | user | 纯文本 |
-| 用户交互 | user | JSON 事件 |
-| 模型输出 | assistant | Markdown + XIUI 卡片 |
-| 系统提示 | system | 协议定义 |
-
-### 6.3 历史压缩
-
-已完成的 XIUI 交互压缩为摘要，避免卡片注释膨胀：
-
-```javascript
-function compressHistory(messages) {
-  const compressed = [];
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg.role === 'assistant' && msg.content.includes('<!-- card:')) {
-      const next = messages[i + 1];
-      if (next && next.role === 'user' && isInteractionEvent(next.content)) {
-        compressed.push({ role: 'assistant', content: compressToSummary(msg, next) });
-        i++;
-        continue;
-      }
-    }
-    compressed.push(msg);
-  }
-  return trimByTokens(compressed, 8000);
-}
-
-function compressToSummary(assistantMsg, userEvent) {
-  const cards = extractCards(assistantMsg.content);
-  const event = JSON.parse(userEvent.content);
-  const parts = cards.map(c => {
-    if (c.type === 'choice') return `选择了${event.cards[c.id]}`;
-    if (c.type === 'input') return `输入了：${event.cards[c.id]}`;
-    if (c.type === 'tip') return `展示了「${c.title}」`;
-    return '';
-  }).filter(Boolean);
-  return `[上一轮：${parts.join('；')}]`;
-}
-```
-
-**压缩策略**：
-- 展示卡片 → 压缩为 "展示了{title}"
-- 交互卡片 → 压缩为 "选择了{value}" / "输入了{value}"
-- 超过 8000 token → 滑动窗口裁剪
-- 超过 10 轮 → 调用 LLM 生成会话级摘要
-
-### 6.4 消息生命周期
-
-```
-1. 用户输入文字 → push {role:"user", content:"文字"}
-2. 模型流式输出 → 解析器逐行 feed → 渲染
-3. 流式结束 → 完整 assistant 消息存入 messages
-4. 用户操作卡片 → 交互收集器暂存
-5. 用户点提交 → 组装事件 → push {role:"user", content: JSON}
-6. 回到步骤 2
-7. 每轮检查大小 → 超出阈值触发压缩
-```
+| 用户提交 | user | ```` ```submit\nJSON\n``` ```` |
+| 模型输出 | assistant | Markdown + 字段定义（协议格式） |
+| 系统提示 | system | 协议定义与规则 |
 
 ---
 
-## 七、前后端交互
+## 九、错误处理
 
-### 7.1 完整时序
-
-```
-前端                          后端/模型
- │                              │
- │──── POST /chat ─────────────→│
- │    messages: [system, ...]   │
- │                              │
- │←─── SSE stream ──────────────│
- │    token 逐行流式输出         │
- │    ...<!-- card:choice:c1 --> │  ← 骨架屏
- │    ...<!-- /card -->          │  ← 完整卡片
- │    [流结束]                   │
- │                              │
- │  [用户操作 c1→C, c2→B]        │
- │  [用户点提交]                 │
- │                              │
- │──── POST /chat ─────────────→│
- │    messages: [               │
- │      system,                 │
- │      ...history,             │
- │      assistant: "今天学...", │
- │      user: {"cards":{...}}   │
- │    ]                         │
- │                              │
- │←─── SSE stream ──────────────│
-```
-
-### 7.2 前端实现
-
-```javascript
-class XIUIChat {
-  constructor(systemPrompt) {
-    this.messages = [{ role: "system", content: systemPrompt }];
-    this.parser = new XIUIParser();
-    this.collector = new InteractionCollector();
-  }
-
-  async sendMessage(text) {
-    this.messages.push({ role: "user", content: text });
-    await this.callModel();
-  }
-
-  async submitCards(submitId) {
-    const result = this.collector.build(submitId, this.parser.pendingCards);
-    this.messages.push({ role: "user", content: JSON.stringify(result) });
-    this.parser.pendingCards = [];
-    await this.callModel();
-  }
-
-  async callModel() {
-    const trimmed = compressHistory(this.messages);
-    
-    const stream = await fetch('/chat', {
-      method: 'POST',
-      body: JSON.stringify({ messages: trimmed }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    let full = '';
-    const reader = stream.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of new TextDecoder().decode(value).split('\n')) {
-        if (!line.trim()) continue;
-        full += line + '\n';
-        this.parser.feed(line);
-      }
-    }
-    this.messages.push({ role: "assistant", content: full.trim() });
-  }
-}
-```
+| 错误场景 | 处理方式 |
+|---------|---------|
+| 字段解析失败 | 降级为标准代码块，正常显示 |
+| 字段不完整（缺少闭合 ```） | 超时后强制结束，降级显示 |
+| 提交校验失败 | 标红未填写字段，阻止发送 |
+| 未知字段类型 | 降级为标准代码块 |
+| 缺少 submit | 不影响渲染，但无法提交 |
 
 ---
 
-## 八、错误处理
+## 十、完整示例
 
-- **解析失败**：降级为普通 Markdown 渲染
-- **嵌套不匹配**：栈深度 > 10 时强制重置
-- **提交校验失败**：标红未操作卡片，不发送请求
-
----
-
-## 九、完整示例
-
-### 模型输出
+### 10.1 第一轮：AI 输出表单
 
 ```
 今天我们来学习 Python 的可变类型和不可变类型。
 
-<!-- card:choice:c1 -->
+```form:s1:choice:q1
 下面哪个是可变类型？
-- A. 整数 int
-- B. 字符串 str
-- C. 列表 list
-- D. 元组 tuple
-<!-- /card -->
-
-<!-- card:choice:c2 -->
-下面哪个是引用传递？
-- A. 整数 int
-- B. 列表 list
-<!-- /card -->
-
-<!-- card:submit:s1 -->
-提交
-<!-- /card -->
+A. 整数 int
+B. 字符串 str
+C. 列表 list
+D. 元组 tuple
 ```
 
-### 用户操作后前端发送
-
-```json
-{"submit_id": "s1", "cards": {"c1": "C", "c2": "B"}}
+```form:s1:choice:q2
+下面哪个操作会报错？
+A. `list[0] = 10`
+B. `tuple[0] = 10`
 ```
 
-### 模型继续输出
+```form:s1:submit:ok
+提交答案
+```
+```
+
+### 10.2 用户提交表单结果
+
+```
+```submit
+{"formid":"s1","q1":"C","q2":"B"}
+```
+```
+
+### 10.3 第二轮：AI 继续对话
 
 ```
 回答正确！🎉
 
-<!-- card:tip:t1 -->
-> 💡 为什么 list 是可变的？
-> 列表在内存中是一块连续的空间。当你执行 `lst[0] = 10` 时，
-> 是直接修改了这块空间里的值，而不是创建新列表。
-> 元组 tuple 的内存是只读的——任何修改都触发 TypeError。
-<!-- /card -->
+```form:s2:tip:t1
+> 💡 核心区别
+> 可变类型（list、dict）的值可以原地修改；
+> 不可变类型（int、str、tuple）每次操作创建新对象。
+```
 
 用你自己的话解释一下：
 
-<!-- card:input:i1 -->
+```form:s2:input:i1
 用一句话解释可变类型
-*（不超过 100 字）*
-<!-- /card -->
+*(不超过 100 字)*
+```
 
-<!-- card:submit:s2 -->
-提交
-<!-- /card -->
+```form:s2:submit:ok
+提交答案
+```
+```
+
+### 10.4 用户提交输入结果
+
+```
+```submit
+{"formid":"s2","i1":"列表可以原地修改，元组不行"}
+```
 ```
 
 ---
 
-## 附录：模型提示词摘要
+## 十一、模型提示词
 
 将以下内容注入 system prompt：
 
-> 你是学习助手。可以通过 Markdown 输出卡片：`<!-- card:类型:id[@key:value] -->...<!-- /card -->`。card 类型：choice/tip/input/progress/summary/confirm/chart/section/tab/submit。交互卡片（choice/input/confirm）后必须跟 submit。每轮最多 3 张交互卡片。卡片内容用标准 Markdown。
+> 你是学习助手。可以通过 Markdown 代码块输出交互表单：`` ```form:form_id:类型:type_id ``...`` ``` ``
+> 
+> **协议格式**：`` ```form:表单ID:类型:字段ID ``...`` ``` ``
+> 
+> **字段类型**：
+> - choice：选择题，格式：第一行题目，后续行 A. 选项
+> - input：文本输入，格式：第一行标签，`*(占位符)*` 可选
+> - confirm：确认框，格式：`**标题**`，正文描述，`> 按钮1 \| 按钮2`
+> - tip：提示信息，纯文本
+> - progress：进度条，格式：`**标题** 70% (7/10)`
+> - summary：概览，Markdown 表格
+> - submit：提交按钮，必须跟在交互字段后面
+> 
+> **ID 命名**：
+> - form_id：用 s1/s2/s3... 表示每次回复的表单
+> - choice：用 q1/q2，input：用 i1/i2，tip：用 t1/t2，submit：用 ok
+> 
+> **用户提交格式**：`` ```submit\n{"formid":"s1","q1":"A"}\n``` ``，其中 formid 是表单 ID，字段 ID 对应你输出的 type_id。
+> 
+> **交互流程**：用户提交后你会收到 JSON 格式的字段值。你根据用户的选择继续对话。

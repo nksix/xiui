@@ -2,26 +2,32 @@
  * XIUI v3 — 聊天流式 UI SDK
  *
  * 协议格式（fenced code block）:
- *   ```card:type:id
+ *   ```form:form_id:type:type_id
  *   内容行1
  *   内容行2
  *   ```
  *
  * 示例:
- *   ```card:choice:c1
+ *   ```form:s1:choice:q1
  *   题目？
- *   - A. 选项A
- *   - B. 选项B
+ *   A. 选项A
+ *   B. 选项B
+ *   ```
+ *
+ * 提交格式:
+ *   ```submit
+ *   {"formid":"s1","q1":"A"}
  *   ```
  *
  * 核心概念：
- *   - type（卡片类型）: 从协议中解析，如 'choice', 'input', 'poll'
- *   - id（卡片ID）: 从协议中解析，如 'c1', 'p1'，用于唯一标识
- *   - data（结构化数据）: parse() 解析后的结果，由插件决定
- *   - value（卡片值）: 用户交互后设置的值，如选择的选项、输入的文本
+ *   - formId（表单ID）: 从协议中解析，如 's1', 'exam1'，用于汇聚表单
+ *   - type（字段类型）: 从协议中解析，如 'choice', 'input', 'tip'
+ *   - typeId（字段ID）: 从协议中解析，如 'q1', 'i1'，用于唯一标识字段
+ *   - parsed（结构化数据）: parse() 解析后的结果
+ *   - value（字段值）: 用户交互后设置的值
  */
 
-const CARD_FENCE_RE = /^```card:(\w+):(\w+)(?:\[@(.+)\])?\s*$/;
+const CARD_FENCE_RE = /^```form:(\w+):(\w+):(\w+)(?:\[@(.+)\])?\s*$/;
 const FENCE_END_RE  = /^```\s*$/;
 
 export class XIUIPlugin {
@@ -192,14 +198,15 @@ export class XIUIChat {
   _replaceCardBlocks(container) {
     const codes = container.querySelectorAll('pre code');
     codes.forEach(code => {
-      const m = code.className.match(/language-card:(\w+):(\w+)(?:\[@(.+?)\])?/);
+      const m = code.className.match(/language-form:(\w+):(\w+):(\w+)(?:\[@(.+?)\])?/);
       if (!m) return;
       const pre = code.parentElement;
       const rawText = this._dec(code.innerHTML);
-      const card = this._build(m[1], m[2], m[3], rawText);
+      const card = this._build(m[1], m[2], m[3], m[4], rawText);
       const el = document.createElement('div');
       el.className = `card card-${card.type}`;
-      el.dataset.cardId = card.id;
+      el.dataset.formId = card.formId;
+      el.dataset.typeId = card.typeId;
       this._callRender(card, el);
       pre.replaceWith(el);
     });
@@ -214,9 +221,10 @@ export class XIUIChat {
         const m = line.match(CARD_FENCE_RE);
         if (m) {
           this._state = 'card';
-          this._cardInfo = { type: m[1], id: m[2], attrs: this._parseAttrs(m[3]) };
+          this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
           this._cardBuf = '';
-          if (this._onCardBegin) this._onCardBegin(m[1], m[2]);
+          if (this._onText) this._onText(this._textBuf);
+          if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
           return;
         }
         this._textBuf += line + '\n';
@@ -242,17 +250,18 @@ export class XIUIChat {
 
   _emit() {
     if (!this._cardInfo) return;
-    const card = this._build(this._cardInfo.type, this._cardInfo.id, null, this._cardBuf);
+    const card = this._build(this._cardInfo.formId, this._cardInfo.type, this._cardInfo.typeId, null, this._cardBuf);
     const el = document.createElement('div');
     el.className = `card card-${card.type}`;
-    el.dataset.cardId = card.id;
+    el.dataset.formId = card.formId;
+    el.dataset.cardId = card.typeId;
     this._callRender(card, el);
     if (this._onCard) this._onCard(card, el);
     this._cardInfo = null;
     this._cardBuf = '';
   }
 
-  _build(type, id, attrStr, text) {
+  _build(formId, type, typeId, attrStr, text) {
     const attrs = typeof attrStr === 'string' ? this._parseAttrs(attrStr) : (attrStr || {});
     const lines = text ? text.split('\n').filter(l => Boolean(l)) : [];
     const plugin = this._plugins[type];
@@ -260,9 +269,9 @@ export class XIUIChat {
       try { return plugin.parse(lines); }
       catch (e) { console.warn(`[XIUI] parse "${type}":`, e); return {}; }
     })() : {};
-    const card = { type, id, attrs, lines, text, data, _md: this.md };
-    card.setValue = (value) => this.setValue(id, value);
-    card.getValue = () => this.getValue(id);
+    const card = { formId, type, typeId, attrs, lines, text, data, _md: this.md };
+    card.setValue = (value) => this.setValue(typeId, value);
+    card.getValue = () => this.getValue(typeId);
     card.trigger = (evtType, detail) => this.trigger(card, evtType, detail);
     this._cards.push(card);
     return card;
@@ -299,52 +308,62 @@ export class XIUIChat {
     return [...this._cards];
   }
 
-  validate() {
-    const requiredTypes = ['choice', 'input'];
+  validate(formId) {
+    const requiredTypes = ['choice', 'input', 'confirm'];
     const missing = [];
     for (const card of this._cards) {
+      if (formId && card.formId !== formId) continue;
       if (requiredTypes.includes(card.type)) {
-        const v = this._values[card.id];
+        const v = this._values[card.typeId];
         if (v === undefined || v === null || v === '') {
-          missing.push(card.id);
+          missing.push(card.typeId);
         }
       }
     }
     return { valid: missing.length === 0, missing };
   }
 
-  submit() {
+  submit(formId) {
     if (this._submitted) return { success: false, error: 'already submitted' };
-    const { valid, missing } = this.validate();
+    const { valid, missing } = this.validate(formId);
     if (!valid) return { success: false, error: 'incomplete', missing };
-    this._submitted = true;
+    
+    const formCards = formId 
+      ? this._cards.filter(c => c.formId === formId)
+      : this._cards;
+    
+    const data = { formid: formId || 'default' };
     const result = [];
-    let humanReadable = '';
-    for (const card of this._cards) {
-      const value = this.getValue(card.id);
+    
+    for (const card of formCards) {
+      const value = this.getValue(card.typeId);
       if (value !== undefined && value !== null) {
-        const item = {
-          id: card.id,
+        data[card.typeId] = value;
+        result.push({
+          id: card.typeId,
           type: card.type,
+          formId: card.formId,
           value,
           question: card.data.question || card.data.title || card.data.body || '',
           options: card.data.options || []
-        };
-        result.push(item);
-        
-        if (item.type === 'choice') {
-          const selectedOpt = item.options.find(o => o.id === value);
-          humanReadable += `- [选择题] ${item.question}\n  用户选择：${value}${selectedOpt ? `（${selectedOpt.label}）` : ''}\n`;
-        } else if (item.type === 'input') {
-          humanReadable += `- [输入框] ${item.question}\n  用户输入：${value}\n`;
-        }
+        });
       }
     }
-    return { success: true, data: this.getAllValues(), cards: result, summary: humanReadable };
+    
+    if (formId) {
+      formCards.forEach(c => c._submitted = true);
+    } else {
+      this._submitted = true;
+    }
+    
+    this._lastSubmittedFormId = formId;
+    
+    return { success: true, data, cards: result };
   }
 
-  isSubmitted() {
-    return this._submitted;
+  isSubmitted(formId) {
+    if (!formId) return this._submitted;
+    return this._cards.filter(c => c.formId === formId).every(c => c._submitted);
   }
 
   trigger(card, evtType, detail) {
