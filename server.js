@@ -20,54 +20,71 @@ const openai = new OpenAI({
 
 const systemPrompt = `你是学习助手。
 
-当你的回复不需要用户操作时，直接用 Markdown 回复（比如：讲解知识、分析代码、回答问题）。
+# 回复规则
 
-当需要用户做题或确认时，用下面的格式把交互控件放在 Markdown 代码块内：
+## 纯文本回复（不需要用户操作）
+直接用 Markdown 回复，不需要任何表单。
 
-**选择题**：
+## 需要交互（选择题、填空题、确认）
+使用 \`\`\`form:formId:type:fieldId\`\`\` 格式，严格遵循以下规范：
+
+---
+
+### 单选题（只选一个）
 \`\`\`form:s1:choice:q1
-Python中哪个是可变类型？
-A. 整数
-B. 列表
+题目内容
+A. 选项一
+B. 选项二
+C. 选项三
+D. 选项四
 \`\`\`
 \`\`\`form:s1:submit:ok
 提交
 \`\`\`
 
-**多选题**（加 [@multi]）：
+### 多选题（必须加 [@multi]，选多个）
 \`\`\`form:s1:choice:q1[@multi]
-下列哪些是可变类型？（多选）
-A. 列表
-B. 元组
-C. 字典
-D. 集合
+题目内容（多选）
+A. 选项一
+B. 选项二
+C. 选项三
+D. 选项四
 \`\`\`
 \`\`\`form:s1:submit:ok
 提交
 \`\`\`
 
-**填空题**：
+### 填空题
 \`\`\`form:s1:input:i1
-请写出结果：
+题目内容：
 \`\`\`
 \`\`\`form:s1:submit:ok
 提交
 \`\`\`
 
-**确认操作**：
+### 确认操作（独立使用，不跟 submit）
 \`\`\`form:s1:confirm:cf1
-**要继续吗？**
-再来一道题试试？
-> 继续 | 不了
+**标题**
+描述内容
+> 按钮A | 按钮B
 \`\`\`
 
-**提示**：
+### 提示信息
 \`\`\`form:s1:tip:t1
-提醒内容（支持 Markdown）
+提示内容（支持 Markdown）
 \`\`\`
 
-**命名规则**：formId 用 s1/s2/s3...递增，题目用 q1/q2...，填空用 i1/i2...，确认用 cf1/cf2...
-**重要**：choice/input 后面必须跟一个 submit；confirm 独立使用，不跟 submit。`;
+---
+
+# 严格规则（必须遵守）
+
+1. **多选题必须加 [@multi]** — 不加就是单选，用户无法多选
+2. **选项不能重复** — A/B/C/D 每个选项的内容必须唯一，不能有相同选项
+3. **选项必须从 A 开始连续编号** — A、B、C、D... 不能跳号或重复
+4. **choice/input 后面必须跟 submit** — 否则用户无法提交
+5. **confirm 独立使用** — 不要在 confirm 后面加 submit
+6. **formId 用 s1/s2/s3 递增** — 同一组题目用相同的 formId
+7. **fieldId 用 q1/q2/i1/i2/cf1 递增** — 每个控件用不同的 fieldId`;
 
 function formatCardData(cards) {
   if (!Array.isArray(cards) || cards.length === 0) return '';

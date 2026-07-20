@@ -47,9 +47,13 @@ class ChoicePlugin extends XIUIPlugin {
   parse(lines) {
     const question = lines[0] || '';
     const options = [];
+    const seenIds = new Set();
     for (let i = 1; i < lines.length; i++) {
       const m = lines[i].match(/^-?\s*([A-D])\.\s*(.+)$/);
-      if (m) options.push({ id: m[1], label: m[2] });
+      if (m && !seenIds.has(m[1])) {
+        options.push({ id: m[1], label: m[2] });
+        seenIds.add(m[1]);
+      }
     }
     return { question, options };
   }
