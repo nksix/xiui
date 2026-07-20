@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <style>
-    :root { --bg:#0f0f23; --bg2:#1a1a2e; --bg3:#16213e; --text:#e4e4e7; --mute:#a1a1aa; --accent:#667eea; --border:#27272a; }
+    :root { --bg:#0f0f23; --bg2:#1a1a2e; --bg3:#16213e; --text:#e4e4e7; --mute:#a1a1aa; --accent:#667eea; --border:#27272a;
+            --xi-bg:#0f0f23; --xi-bg2:#1a1a2e; --xi-text:#e4e4e7; --xi-border:#27272a; --xi-accent:#667eea; --xi-accent2:#7c3aed; --xi-card-bg:#1e1e2f; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system,sans-serif; margin:0; padding:0; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
     .chat-wrap { flex:1; display:flex; flex-direction:column; max-width:900px; margin:0 auto; width:100%; }
@@ -32,20 +33,12 @@
     .bubble th,.bubble td { padding:8px 12px; border:1px solid var(--border); text-align:left; }
     .bubble blockquote { border-left:3px solid var(--accent); margin:8px 0; padding:4px 12px; color:var(--mute); }
 
-    .sk { display:flex; align-items:center; gap:12px; padding:20px; margin:12px 0; border:1px solid var(--border); border-radius:12px; opacity:.5; animation:pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.8} }
-    .sk-l { flex:1; height:12px; background:var(--border); border-radius:4px; }
-    .pv { padding:12px 16px; margin:12px 0; border:1px dashed var(--border); border-radius:12px; line-height:1.6; font-size:14px; }
-    .cursor { display:inline-block; width:2px; height:1.2em; background:var(--accent); vertical-align:text-bottom; animation:blink 1s step-end infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
     .reasoning-block { margin:8px 0; padding:10px 14px; background:rgba(102,126,234,.06); border-left:3px solid rgba(102,126,234,.3); border-radius:0 8px 8px 0; font-size:13px; }
     .reasoning-block[open] { border-left-color:var(--accent); }
     .reasoning-block summary { cursor:pointer; color:var(--mute); font-size:12px; font-weight:500; outline:none; user-select:none; }
     .reasoning-block summary:hover { color:var(--text); }
     .reasoning-text { margin-top:8px; color:var(--mute); white-space:pre-wrap; line-height:1.5; font-style:italic; }
 
-    .card { background:#1e1e2f; border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin:12px 0; }
     .card p { margin:0 0 .5em; }
     .card-choice .opt, .card-choice .opt-disabled { display:block; padding:10px 14px; margin:6px 0; border:1px solid var(--border); border-radius:8px; font-size:14px; }
     .card-choice .opt { cursor:pointer; transition:all .2s; }
@@ -121,170 +114,34 @@
   </div>
 
   <script type="module">
-    import { XIUIChat, XIUIPlugin } from '../src/index.js';
+    import { XIUIChat } from '../src/index.js';
 
     console.log('[XIUI] Module loaded');
-    
+
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('sendBtn');
     const statusEl = document.getElementById('status');
-    
-    console.log('[XIUI] Elements:', { messagesEl, inputEl, sendBtn, statusEl });
-    
-    const md = markdownit({ 
-  html: true, 
-  breaks: true,
-  linkify: true,
-  typographer: true,
-  listStart: 1,
-  tables: true
-});
 
-    // Track reasoning state across feed calls
-    let reasoningEl = null;
-    let reasoningDone = false;
-    let reasoningText = '';
+    const md = markdownit({ html: true, breaks: true, linkify: true, typographer: true, tables: true });
 
     const API_URL = '/api/chat';
     let chatHistory = [];
     let isSending = false;
+    let reasoningEl = null;
+    let reasoningDone = false;
+    let reasoningText = '';
 
-    function mkmd(t) {
-      let h = md.render(t);
-      h = h.replace(/\$\$(.+?)\$\$/g, (_,f) => {
-        try { const s=document.createElement('span'); katex.render(f.trim(),s,{throwOnError:false}); return s.innerHTML; }
-        catch { return `<code>${f}</code>`; }
-      });
-      return h.trim();
-    }
-    const noP = s => mkmd(s).replace(/<\/?p>/g,'');
+    // ═══ 一行接入 ═══
+    const chat = new XIUIChat({ md });
 
-    let currentChat = null;
-    let currentBubble = null;
-
-    const cardDefs = {
-      choice: {
-        render(card, el) {
-          const d = card.data || {};
-          el.innerHTML = mkmd(d.question || '') + (d.options || []).map(o =>
-            `<span class="opt" data-id="${o.id}">${noP(o.label)}</span>`).join('');
-          el.querySelectorAll('.opt').forEach(o => o.onclick = () => {
-            if (currentChat.isSubmitted()) return;
-            const isMulti = d.multi === true || String(d.multi || '').toLowerCase() === 'true';
-            if (isMulti) {
-              o.classList.toggle('sel');
-              const selected = Array.from(el.querySelectorAll('.opt.sel')).map(x => x.dataset.id).sort();
-              card.setValue(selected.join(','));
-            } else {
-              el.querySelectorAll('.opt').forEach(x => x.classList.remove('sel'));
-              o.classList.add('sel');
-              card.setValue(o.dataset.id);
-            }
-          });
-        }
-      },
-      tip: {
-        render(card, el) { el.innerHTML = mkmd((card.data||{}).body||''); }
-      },
-      slider: {
-        render(card, el) {
-          const d = card.data||{};
-          el.innerHTML = `${mkmd(d.title||'')}<div class="slider-wrap"><input type="range" class="card-slider" min="${d.min||0}" max="${d.max||100}" step="${d.step||1}" value="${d.value??50}"><span class="slider-val">${d.value??50}</span></div>`;
-          const inp = el.querySelector('input');
-          const val = el.querySelector('.slider-val');
-          inp.oninput = () => { val.textContent = inp.value; card.setValue(inp.value); };
-          card.setValue(String(d.value??50));
-        }
-      },
-      switch: {
-        render(card, el) {
-          const d = card.data||{};
-          const on = d.value === true || d.value === 'true';
-          el.innerHTML = `${mkmd(d.title||'')}<label class="switch-wrap"><input type="checkbox" class="card-toggle" ${on ? 'checked' : ''}><span class="switch-track"></span></label>`;
-          const cb = el.querySelector('input');
-          cb.onchange = () => card.setValue(cb.checked ? 'true' : 'false');
-          card.setValue(on ? 'true' : 'false');
-        }
-      },
-      progress: {
-        render(card, el) {
-          const d = card.data||{};
-          el.innerHTML = `${mkmd((d.title||'')+' '+(d.label||''))}<div class="pbar"><div class="pfill" style="width:${(d.progress||0)*100}%"></div></div>`;
-        }
-      },
-      input: {
-        render(card, el) {
-          const d = card.data||{};
-          el.innerHTML = `${mkmd(d.title||'')}<input class="card-input" placeholder="${d.placeholder||''}">`;
-          el.querySelector('input').oninput = e => card.setValue(e.target.value);
-        }
-      },
-      submit: {
-        render(card, el) {
-          el.innerHTML = `<button class="btn-submit">${(card.data||{}).label||'提交'}</button>`;
-          el.querySelector('button').onclick = async () => {
-            if (currentChat.isSubmitted()) return;
-            const formId = card.formId;
-            const result = currentChat.submit(formId);
-            if (!result.success) {
-              // 高亮未完成的必填字段
-              el.closest('.bubble').querySelectorAll('.card-invalid').forEach(x => x.classList.remove('card-invalid'));
-              if (result.error === 'incomplete') {
-                result.missing.forEach(id => {
-                  const cardEl = el.closest('.bubble').querySelector(`[data-typeid="${id}"]`);
-                  if (cardEl) cardEl.classList.add('card-invalid');
-                });
-              }
-              return;
-            }
-            // 禁用所有交互元素 & 显示已提交
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
-            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
-            await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
-          };
-        }
-      },
-      summary: {
-        render(card, el) {
-          const d = card.data || {};
-          const headers = d.headers;
-          const items = d.items || [];
-          if (headers && headers.length) {
-            el.innerHTML = `<table class="sum-tbl"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${items.map(row => `<tr>${(row.cols||[]).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-          } else {
-            el.innerHTML = `<table class="sum-tbl">${items.map(row => `<tr>${(row.cols||[]).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
-          }
-        }
-      },
-      confirm: {
-        render(card, el) {
-          const d = card.data||{};
-          el.innerHTML = `${mkmd(d.title||'')}${mkmd(d.description||'')}<div class="bts"><button class="btn-pri">${d.confirmLabel||'确认'}</button><button class="btn-ghost">${d.cancelLabel||'取消'}</button></div>`;
-          el.querySelector('.btn-pri').onclick = async () => { 
-            if (currentChat.isSubmitted()) return;
-            card.setValue(d.confirmLabel||'confirm');
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
-            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
-            const formId = card.formId;
-            const result = currentChat.submit(formId);
-            if (result.success) {
-              await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
-            }
-          };
-          el.querySelector('.btn-ghost').onclick = async () => { 
-            if (currentChat.isSubmitted()) return;
-            card.setValue(d.cancelLabel||'cancel');
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
-            el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
-            const formId = card.formId;
-            const result = currentChat.submit(formId);
-            if (result.success) {
-              await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
-            }
-          };
-        }
-      }
+    // Submit / Confirm → 调用 API（plugin 自闭环，只负责 UI/状态）
+    chat._onEvent = async (plugin, event, detail) => {
+      if (event !== 'submit') return;
+      const formId = plugin.formId;
+      const result = chat.submit(formId);
+      if (!result.success) return;
+      await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
     };
 
     function addUserMsg(text) {
@@ -293,87 +150,10 @@
       msg.innerHTML = '<div class="avatar user">U</div><div class="bubble"></div>';
       msg.querySelector('.bubble').textContent = text;
       messagesEl.appendChild(msg);
-      // chatHistory 由 callAI 统一管理，避免重复 push
       scrollToBottom();
     }
 
-    function addAIMsg() {
-      const msg = document.createElement('div');
-      msg.className = 'msg';
-      msg.innerHTML = '<div class="avatar ai">AI</div><div class="bubble"></div>';
-      messagesEl.appendChild(msg);
-      currentBubble = msg.querySelector('.bubble');
-      scrollToBottom();
-      return currentBubble;
-    }
-
-    function scrollToBottom() {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    function createChat(bubble) {
-      let cardCount = 0;
-      currentChat = new XIUIChat({
-        cards: cardDefs,
-        autoFlush: 2000,
-        onText: t => {
-          if (!t) return;
-          // 找到最后一张卡片后面的 text-block，没有则新建
-          const lastCard = bubble.querySelector('.card:last-of-type');
-          let tb, created = false;
-          if (lastCard) {
-            tb = lastCard.nextElementSibling;
-            if (!tb || !tb.classList.contains('text-block')) {
-              tb = document.createElement('div');
-              tb.className = 'text-block';
-              lastCard.after(tb);
-              created = true;
-            }
-          } else {
-            tb = bubble.querySelector('.text-block:last-of-type');
-            if (!tb) {
-              tb = document.createElement('div');
-              tb.className = 'text-block';
-              bubble.appendChild(tb);
-              created = true;
-            }
-          }
-          console.log('[onText] created:', created, 'hasCard:', !!lastCard, 'len:', t.length, 'preview:', t.slice(0, 60));
-          tb.innerHTML = mkmd(t);
-          scrollToBottom();
-        },
-        onCardBegin: () => {
-          const skeleton = document.createElement('div');
-          skeleton.className = 'sk';
-          skeleton.innerHTML = '<div class="sk-l"></div><div class="sk-l" style="width:60%"></div>';
-          bubble.appendChild(skeleton);
-          scrollToBottom();
-        },
-        onCardUpdate: t => {
-          const sk = bubble.querySelector('.sk');
-          if (sk) sk.remove();
-          let pv = bubble.querySelector('.pv');
-          if (!pv) { pv = document.createElement('div'); pv.className = 'pv'; bubble.appendChild(pv); }
-          pv.innerHTML = mkmd(t); scrollToBottom();
-        },
-        onCard: (card, el) => {
-          cardCount++;
-          const sk = bubble.querySelector('.sk');
-          const pv = bubble.querySelector('.pv');
-          if (sk) sk.remove();
-          if (pv) pv.remove();
-          el.setAttribute('data-typeid', card.typeId);
-          bubble.appendChild(el); scrollToBottom();
-        },
-        onDone: () => {
-          const sk = bubble.querySelector('.sk');
-          const pv = bubble.querySelector('.pv');
-          if (sk) sk.remove();
-          if (pv) pv.remove();
-        }
-      });
-      return currentChat;
-    }
+    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
     async function send() {
       const text = inputEl.value.trim();
@@ -383,10 +163,7 @@
       await callAI(text);
     }
 
-    async function quickSend(text) {
-      inputEl.value = text;
-      await send();
-    }
+    async function quickSend(text) { inputEl.value = text; await send(); }
 
     async function callAI(message) {
       isSending = true;
@@ -394,10 +171,9 @@
       statusEl.textContent = 'AI 思考中...';
       statusEl.className = 'status';
 
-      const bubble = addAIMsg();
-      const chat = createChat(bubble);
+      const stream = chat.createStream(messagesEl);
+      const bubble = stream.bubble;
 
-      // Reset reasoning state
       reasoningEl = null;
       reasoningDone = false;
       reasoningText = '';
@@ -406,111 +182,88 @@
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message,
-            history: chatHistory.slice(-10),
-          })
+          body: JSON.stringify({ message, history: chatHistory.slice(-10) })
         });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
-        let aiResponse = '';
+        let buf = '', aiResponse = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n\n');
+          buf = lines.pop() || '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.status === 'thinking') {
-                statusEl.textContent = '深度思考中...';
-              }
-              if (data.reasoning_content) {
-                reasoningText += data.reasoning_content;
+              const d = JSON.parse(line.slice(6));
+              if (d.status === 'thinking') statusEl.textContent = '深度思考中...';
+              if (d.reasoning_content) {
+                reasoningText += d.reasoning_content;
                 if (!reasoningEl) {
                   reasoningEl = document.createElement('details');
                   reasoningEl.className = 'reasoning-block';
                   reasoningEl.innerHTML = '<summary>思考过程</summary><div class="reasoning-text"></div>';
-                  // Insert before any existing children (text-block, cards, etc.)
                   bubble.insertBefore(reasoningEl, bubble.firstChild);
                   reasoningEl.open = true;
                 }
-                const rtxt = reasoningEl.querySelector('.reasoning-text');
-                rtxt.textContent += data.reasoning_content;
+                reasoningEl.querySelector('.reasoning-text').textContent += d.reasoning_content;
                 scrollToBottom();
               }
-              if (data.reasoning_end && reasoningEl) {
+              if (d.reasoning_end && reasoningEl) {
                 reasoningDone = true;
                 reasoningEl.open = false;
-                const summary = reasoningEl.querySelector('summary');
-                summary.textContent = '思考过程（已完成）';
+                reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
               }
-              if (data.content) {
+              if (d.content) {
                 if (!reasoningDone && reasoningEl) {
                   reasoningDone = true;
                   reasoningEl.open = false;
-                  const summary = reasoningEl.querySelector('summary');
-                  summary.textContent = '思考过程（已完成）';
+                  reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
                 }
-                aiResponse += data.content;
-                chat.feed(data.content);
+                aiResponse += d.content;
+                chat.feed(d.content);
                 statusEl.textContent = '回复中...';
               }
-              if (data.done) {
+              if (d.done) {
                 if (reasoningEl && !reasoningDone) {
                   reasoningDone = true;
                   reasoningEl.open = false;
-                  const summary = reasoningEl.querySelector('summary');
-                  summary.textContent = '思考过程（已完成）';
+                  reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
                 }
                 chat.flush();
               }
-            } catch (e) {
-              console.error('Parse error:', e);
-            }
+            } catch (e) { console.error('Parse error:', e); }
           }
         }
 
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: aiResponse });
 
-        // 调试面板：渲染 / 原始 视图切换
+        // 调试面板
         const rawView = document.createElement('pre');
         rawView.className = 'raw-view';
         rawView.style.cssText = 'display:none;white-space:pre-wrap;word-break:break-word;font-size:13px;margin:8px 0;padding:12px;background:var(--bg);border-radius:8px;font-family:Monaco,monospace;';
         rawView.textContent = aiResponse;
         bubble.appendChild(rawView);
-
         const dbgBar = document.createElement('div');
         dbgBar.className = 'dbg-bar';
         dbgBar.innerHTML = '<button class="dbg-btn on" data-mode="render">渲染</button><button class="dbg-btn" data-mode="raw">原始</button>';
         bubble.appendChild(dbgBar);
-
         dbgBar.querySelectorAll('button').forEach(btn => {
           btn.onclick = () => {
             dbgBar.querySelectorAll('button').forEach(b => b.classList.remove('on'));
             btn.classList.add('on');
             const isRaw = btn.dataset.mode === 'raw';
             rawView.style.display = isRaw ? '' : 'none';
-            bubble.querySelectorAll('.text-block,.card,.reasoning-block,.sk,.pv').forEach(el => {
-              el.style.display = isRaw ? 'none' : '';
-            });
+            bubble.querySelectorAll('.x-text,.x-card,.reasoning-block,.x-sk,.x-pv').forEach(el => el.style.display = isRaw ? 'none' : '');
           };
         });
         statusEl.textContent = '就绪';
         statusEl.className = 'status success';
-
       } catch (error) {
         console.error('API error:', error);
         statusEl.textContent = '连接失败，请检查后端服务';
@@ -523,10 +276,7 @@
     }
 
     inputEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        send();
-      }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
 
     async function init() {
@@ -535,40 +285,28 @@
         btn.addEventListener('click', () => quickSend(btn.dataset.msg));
       });
 
-      const bubble = addAIMsg();
-      const chat = createChat(bubble);
-
+      chat.createStream(messagesEl);
       const welcome = [
-        '👋 你好！我是你的 AI 学习助手。',
-        '',
+        '👋 你好！我是你的 AI 学习助手。', '',
         '我可以帮助你学习编程知识，包括：',
         '- **Python** 基础与进阶',
         '- **前端开发** (HTML/CSS/JS)',
-        '- **算法与数据结构**',
-        '',
+        '- **算法与数据结构**', '',
         '> 💡 点击下方快捷按钮开始体验，或输入你想问的问题！'
       ];
-
-      let i = 0;
       const textContent = welcome.join('\n');
+      let i = 0;
       const tick = () => {
         if (i >= textContent.length) return;
-        chat.feed(textContent[i]);
-        i++;
+        chat.feed(textContent[i]); i++;
         setTimeout(tick, 30 + Math.random() * 20);
       };
       tick();
 
       try {
         const res = await fetch('/api/health');
-        if (res.ok) {
-          statusEl.textContent = '后端服务已连接';
-          statusEl.className = 'status success';
-        }
-      } catch (e) {
-        statusEl.textContent = '后端服务未启动';
-        statusEl.className = 'status error';
-      }
+        if (res.ok) { statusEl.textContent = '后端服务已连接'; statusEl.className = 'status success'; }
+      } catch (e) { statusEl.textContent = '后端服务未启动'; statusEl.className = 'status error'; }
     }
 
     init();
