@@ -109,7 +109,10 @@ export class XIUIPlugin {
   /** 标记已提交，冻结交互 */
   disable() {
     this._submitted = true;
-    if (this.el) this.el.style.pointerEvents = 'none';
+    if (this.el) {
+      this.el.classList.add('x-card-disabled');
+      this.el.style.pointerEvents = 'none';
+    }
     this.onDisable();
   }
 
@@ -306,9 +309,12 @@ class ConfirmPlugin extends XIUIPlugin {
 
   render() {
     const d = this.data;
-    const disabled = this._submitted ? ' disabled' : '';
+    if (this._submitted) {
+      const cancelled = this._value !== d.confirmLabel;
+      return `<span class="x-tag-done${cancelled ? ' cancelled' : ' ok'}">✓ 已${cancelled ? '取消' : d.confirmLabel}</span>`;
+    }
     return (d.title ? this.md.render(d.title) : '') + (d.description ? this.md.render(d.description) : '')
-      + `<div class="bts"><button class="btn-pri"${disabled}>${d.confirmLabel}</button><button class="btn-ghost"${disabled}>${d.cancelLabel}</button></div>`;
+      + `<div class="bts"><button class="btn-pri">${d.confirmLabel}</button><button class="btn-ghost">${d.cancelLabel}</button></div>`;
   }
 
   afterRender(el) {
@@ -323,13 +329,18 @@ class ConfirmPlugin extends XIUIPlugin {
       self.emit('submit', { action: 'cancel', value: self.data.cancelLabel });
     };
   }
+
+  /** 提交后重渲染为标签 */
+  onDisable() {
+    if (this.el) this.el.innerHTML = this.render();
+  }
 }
 
 class SubmitPlugin extends XIUIPlugin {
   parse(lines) { return { label: lines[0] || '提交' }; }
 
   render() {
-    if (this._submitted) return '<span class="submitted-tag">✓ 已提交</span>';
+    if (this._submitted) return '<span class="x-tag-done ok">✓ 已提交</span>';
     return `<button class="btn-submit">${this.data.label}</button>`;
   }
 
@@ -343,11 +354,8 @@ class SubmitPlugin extends XIUIPlugin {
 
   /** 变为「已提交」视觉 */
   disable() {
-    this._submitted = true;
-    if (this.el) {
-      this.el.innerHTML = this.render();
-      this.el.style.pointerEvents = 'none';
-    }
+    super.disable();
+    if (this.el) this.el.innerHTML = this.render();
   }
 }
 
@@ -487,6 +495,10 @@ export class XIUIChat {
 .x-pv{padding:12px 16px;margin:12px 0;border:1px dashed var(--xi-border,#27272a);border-radius:12px;line-height:1.6;font-size:14px}
 .x-card{background:var(--xi-card-bg,#1e1e2f);border:1px solid var(--xi-border,#27272a);border-radius:12px;padding:16px 20px;margin:12px 0}
 .x-card-invalid{border-color:#ef4444}
+.x-card-disabled{opacity:.5;pointer-events:none;filter:grayscale(.3)}
+.x-tag-done{display:inline-block;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
+.x-tag-done.ok{background:rgba(34,197,94,.12);color:#22c55e}
+.x-tag-done.cancelled{background:rgba(239,68,68,.1);color:#ef4444}
 `.trim();
     document.head.appendChild(style);
   }
