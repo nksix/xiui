@@ -171,6 +171,7 @@
       if (!data.history || !data.history.length) return;
       messagesEl.innerHTML = '';
       chatHistory = [];
+      lastAssistantIdx = -1;
       for (const msg of data.history) {
         if (msg.role === 'user') {
           addUserMsg(msg.content);
@@ -178,6 +179,7 @@
         } else {
           chatHistory.push(msg);
           chat.renderMessage(messagesEl, msg.content, msg.cardState);
+          lastAssistantIdx = chatHistory.length - 1;
         }
       }
       statusEl.textContent = '历史已恢复';

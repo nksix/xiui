@@ -646,7 +646,7 @@ export class XIUIChat {
       const rawText = this._dec(code.innerHTML);
       const card = this._build(m[1], m[2], m[3], m[4], rawText);
       const el = document.createElement('div');
-      el.className = `card card-${card.type}`;
+      el.className = `x-card card card-${card.type}`;
       el.dataset.formId = card.formId;
       el.dataset.typeId = card.typeId;
       this._callRender(card, el);
