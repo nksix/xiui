@@ -50,19 +50,19 @@ XIUI 定义了一套**扁平化表单交互协议**，核心思想：
 │     │   "今天学 Python..."   │                          │        │
 │     │                       │                          │        │
 │     │─── 字段定义 ──────────→│                          │        │
-│     │   ```form:s1:choice:q1│──→ 骨架屏                │        │
+│     │   ```xiui@form:s1:choice:q1│──→ 骨架屏                │        │
 │     │   题目内容             │──→ 渲染题目              │        │
 │     │   A. 选项A             │──→ 渲染选项              │        │
 │     │   ```                  │──→ 完成渲染              │        │
 │     │                       │                          │        │
 │     │─── 提交按钮 ──────────→│                          │        │
-│     │   ```form:s1:submit:ok │──→ 渲染提交按钮          │        │
+│     │   ```xiui@form:s1:submit:ok │──→ 渲染提交按钮          │        │
 │     │                       │                          │        │
 │     │                       │←── 用户选择选项 ──────────│        │
 │     │                       │←── 用户点提交 ────────────│        │
 │     │                       │                          │        │
 │     │←─── 表单结果 ──────────│                          │        │
-│     │   ```submit            │                          │        │
+│     │   ```xiui@submit:表单ID            │                          │        │
 │     │   {"formid":"s1",      │                          │        │
 │     │    "q1":"A","q2":"B"}  │                          │        │
 │     │   ```                  │                          │        │
@@ -80,7 +80,7 @@ XIUI 定义了一套**扁平化表单交互协议**，核心思想：
 ### 3.1 字段定义格式（AI → 前端）
 
 ```
-```form:form_id:type:type_id
+```xiui@form:form_id:type:type_id
 字段内容
 ```
 ```
@@ -98,7 +98,7 @@ XIUI 定义了一套**扁平化表单交互协议**，核心思想：
 ```markdown
 今天我们来学习 Python 的可变类型。
 
-```form:s1:choice:q1
+```xiui@form:s1:choice:q1
 下面哪个是可变类型？
 A. 整数 int
 B. 字符串 str
@@ -106,13 +106,13 @@ C. 列表 list
 D. 元组 tuple
 ```
 
-```form:s1:choice:q2
+```xiui@form:s1:choice:q2
 下面哪个操作会报错？
 A. `list[0] = 10`
 B. `tuple[0] = 10`
 ```
 
-```form:s1:submit:ok
+```xiui@form:s1:submit:ok
 提交答案
 ```
 ```
@@ -120,7 +120,7 @@ B. `tuple[0] = 10`
 ### 3.3 输入协议（前端 → AI）
 
 ```markdown
-```submit
+```xiui@submit:s1
 {"formid":"s1","q1":"C","q2":"B"}
 ```
 ```
@@ -143,22 +143,21 @@ B. `tuple[0] = 10`
 | choice | 交互字段 | 是 | 选择题 |
 | input | 交互字段 | 是 | 文本输入 |
 | confirm | 交互字段 | 是 | 确认框 |
-| tip | 内容字段 | 否 | 提示信息 |
-| progress | 内容字段 | 否 | 进度条 |
-| summary | 内容字段 | 否 | 概览统计 |
+| slider | 交互字段 | 是 | 滑块 |
+| switch | 交互字段 | 是 | 开关 |
 | submit | 触发器 | 是 | 提交按钮（必须） |
 
 ### 4.2 choice — 选择题
 
 **输出格式**：
 ```
-```form:s1:choice:q1
+```xiui@form:s1:choice:q1
 题目内容
 A. 选项A
 B. 选项B
 ```
 
-```form:s1:choice:q2[@multi]
+```xiui@form:s1:choice:q2[@multi]
 多选题题目
 A. 选项A
 B. 选项B
@@ -178,7 +177,7 @@ C. 选项C
 
 **输出格式**：
 ```
-```form:s1:input:i1
+```xiui@form:s1:input:i1
 输入提示
 *(占位符文本)*
 ```
@@ -194,7 +193,7 @@ C. 选项C
 
 **输出格式**：
 ```
-```form:s1:confirm:cf1
+```xiui@form:s1:confirm:cf1
 **确认标题**
 描述文本
 > 按钮1 | 按钮2
@@ -210,58 +209,49 @@ C. 选项C
 - 用户选择后**直接提交**表单
 - **与 submit 互斥**：同一表单中只能有一个提交按钮
 
-### 4.5 tip — 提示
+### 4.5 slider — 滑块
 
 **输出格式**：
 ```
-```form:s1:tip:t1
-提示内容（支持 Markdown）
+```xiui@form:s1:slider:sl1
+标签
+最小值-最大值-步长-默认值
 ```
 ```
+
+**提交值**：数字字符串（如 `"50"`）
 
 **规则**：
-- 纯展示，无交互
-- 内容支持完整 Markdown
+- 第一行是标签
+- 第二行 `最小值-最大值-步长-默认值`（后三项可选，默认 `0-100-1-50`）
 
-### 4.6 progress — 进度条
+### 4.6 switch — 开关
 
 **输出格式**：
 ```
-```form:s1:progress:p1
-**标题** 70% (7/10)
+```xiui@form:s1:switch:sw1
+标签
+true
 ```
 ```
+
+**提交值**：`"true"` 或 `"false"`
 
 **规则**：
-- `**标题**` 是进度标题
-- `70%` 是进度百分比
-- `(7/10)` 是进度标签（可选）
+- 第一行是标签
+- 第二行为默认状态 `true` 或 `false`（可选，默认 `false`）
 
-### 4.7 summary — 概览
-
-**输出格式**：
-```
-```form:s1:summary:sm1
-| 指标 | 数值 |
-|------|------|
-| 学习时长 | 2.5 小时 |
-```
-```
-
-**规则**：
-- 使用 Markdown 表格展示数据
-
-### 4.8 submit — 提交按钮
+### 4.7 submit — 提交按钮
 
 **输出格式**：
 ```
-```form:s1:submit:ok
+```xiui@form:s1:submit:ok
 提交答案
 ```
 ```
 
 **规则**：
-- 同一 `form_id` 的交互字段（choice/input）后面必须跟 submit
+- 同一 `form_id` 的交互字段（choice/input/slider/switch）后面必须跟 submit
 - 用户点击提交后，收集同一 `form_id` 的所有交互字段的值，整批发送
 - 提交前校验：未操作的交互字段需要标红提示
 
@@ -283,11 +273,10 @@ C. 选项C
 |---------|---------|------|------|
 | choice | `q1`, `q2`, `q3`... | `q1` | 第 1 题 |
 | input | `i1`, `i2`, `i3`... | `i1` | 第 1 个输入 |
-| tip | `t1`, `t2`, `t3`... | `t1` | 第 1 个提示 |
-| progress | `p1`, `p2`, `p3`... | `p1` | 第 1 个进度条 |
+| slider | `sl1`, `sl2`... | `sl1` | 第 1 个滑块 |
+| switch | `sw1`, `sw2`... | `sw1` | 第 1 个开关 |
 | confirm | `cf1`, `cf2`... | `cf1` | 第 1 个确认框 |
 | submit | `ok`, `submit`, `next` | `ok` | 提交按钮 |
-| summary | `sm1`, `sm2`... | `sm1` | 第 1 个概览 |
 
 ---
 
@@ -300,9 +289,8 @@ C. 选项C
 | choice | 是 | 必须选择至少一个选项 |
 | input | 是 | 输入内容不能为空 |
 | confirm | 是 | 必须选择确认或取消 |
-| tip | 否 | 无校验 |
-| progress | 否 | 无校验 |
-| summary | 否 | 无校验 |
+| slider | 是 | 必须调节到一个值 |
+| switch | 是 | 必须选择开启或关闭 |
 | submit | 必须 | 无校验（作为触发器） |
 
 ### 6.2 校验流程
@@ -336,18 +324,20 @@ C. 选项C
 | choice | string | `"A"` 或 `"A,B"`（多选） |
 | input | string | `"用户输入的内容"` |
 | confirm | string | `"确认"` 或 `"取消"` |
+| slider | string | `"50"` |
+| switch | string | `"true"` 或 `"false"` |
 
 ### 7.3 多表单提交
 
 如果一次回复中有多个表单，每个表单独立提交：
 
 ```markdown
-```submit
-{"formid":"exam1","q1":"A","q2":"B"}
+```xiui@submit:s1
+{"formid":"s1","q1":"A","q2":"B"}
 ```
 
-```submit
-{"formid":"form1","i1":"张三","i2":"25"}
+```xiui@submit:s1
+{"formid":"s1","i1":"张三","i2":"25"}
 ```
 ```
 
@@ -362,10 +352,10 @@ messages = [
   { role: "system", content: "你是学习助手..." },
   
   { role: "user", content: "今天学什么？" },
-  { role: "assistant", content: "今天学习 Python。\n\n```form:s1:choice:q1\n..." },
+  { role: "assistant", content: "今天学习 Python。\n\n```xiui@form:s1:choice:q1\n..." },
   
-  { role: "user", content: "```submit\n{\"formid\":\"s1\",\"q1\":\"C\"}\n```" },
-  { role: "assistant", content: "回答正确！\n\n```form:s2:tip:t1\n..." },
+  { role: "user", content: "```xiui@submit:s1\n{\"formid\":\"s1\",\"q1\":\"C\"}\n```" },
+  { role: "assistant", content: "回答正确！\n\n```xiui@form:s2:slider:sl1\n..." },
   
   { role: "user", content: "继续下一个知识点" }
 ];
@@ -376,7 +366,7 @@ messages = [
 | 来源 | role | content 格式 |
 |------|------|-------------|
 | 用户文字 | user | 纯文本 |
-| 用户提交 | user | ```` ```submit\nJSON\n``` ```` |
+| 用户提交 | user | ```` ```xiui@submit:表单ID\nJSON\n``` ```` |
 | 模型输出 | assistant | Markdown + 字段定义（协议格式） |
 | 系统提示 | system | 协议定义与规则 |
 
@@ -401,7 +391,7 @@ messages = [
 ```
 今天我们来学习 Python 的可变类型和不可变类型。
 
-```form:s1:choice:q1
+```xiui@form:s1:choice:q1
 下面哪个是可变类型？
 A. 整数 int
 B. 字符串 str
@@ -409,13 +399,13 @@ C. 列表 list
 D. 元组 tuple
 ```
 
-```form:s1:choice:q2
+```xiui@form:s1:choice:q2
 下面哪个操作会报错？
 A. `list[0] = 10`
 B. `tuple[0] = 10`
 ```
 
-```form:s1:submit:ok
+```xiui@form:s1:submit:ok
 提交答案
 ```
 ```
@@ -423,7 +413,7 @@ B. `tuple[0] = 10`
 ### 10.2 用户提交表单结果
 
 ```
-```submit
+```xiui@submit:s1
 {"formid":"s1","q1":"C","q2":"B"}
 ```
 ```
@@ -433,29 +423,32 @@ B. `tuple[0] = 10`
 ```
 回答正确！🎉
 
-```form:s2:tip:t1
-> 💡 核心区别
-> 可变类型（list、dict）的值可以原地修改；
-> 不可变类型（int、str、tuple）每次操作创建新对象。
+```xiui@form:s2:slider:sl1
+学习强度
+1-10-1-5
+```
+
+```xiui@form:s2:switch:sw1
+每日提醒
+true
 ```
 
 用你自己的话解释一下：
 
-```form:s2:input:i1
+```xiui@form:s2:input:i1
 用一句话解释可变类型
 *(不超过 100 字)*
 ```
 
-```form:s2:submit:ok
+```xiui@form:s2:submit:ok
 提交答案
-```
 ```
 
 ### 10.4 用户提交输入结果
 
 ```
-```submit
-{"formid":"s2","i1":"列表可以原地修改，元组不行"}
+```xiui@submit:s1
+{"formid":"s1","i1":"列表可以原地修改，元组不行"}
 ```
 ```
 
@@ -469,15 +462,15 @@ B. `tuple[0] = 10`
 你是学习助手。请严格按照 XIUI 协议输出交互内容。
 
 **XIUI 协议**：使用 Markdown 代码块输出交互表单
-- 选择题：```form:s1:choice:q1\n题目\nA.选项\n```
-- 多选题：```form:s1:choice:q2[@multi]\n题目\nA.选项\n```
-- 输入框：```form:s1:input:i1\n标签\n*(占位符)*\n```
-- 确认框：```form:s1:confirm:cf1\n**标题**\n描述\n>确认|取消\n```
-- 提示：```form:s1:tip:t1\n内容\n```
-- 进度条：```form:s1:progress:p1\n**标题** 70%\n```
-- 提交：```form:s1:submit:ok\n提交\n```
+- 选择题：```xiui@form:s1:choice:q1\n题目\nA.选项\n```
+- 多选题：```xiui@form:s1:choice:q2[@multi]\n题目\nA.选项\n```
+- 输入框：```xiui@form:s1:input:i1\n标签\n*(占位符)*\n```
+- 确认框：```xiui@form:s1:confirm:cf1\n**标题**\n描述\n>确认|取消\n```
+- 滑块：```xiui@form:s1:slider:sl1\n标签\n0-100-1-50\n```
+- 开关：```xiui@form:s1:switch:sw1\n标签\ntrue\n```
+- 提交：```xiui@form:s1:submit:ok\n提交\n```
 
-用户提交格式：```submit\n{"formid":"s1","q1":"A"}\n```
+用户提交格式：```xiui@submit:s1\n{"formid":"s1","q1":"A"}\n```
 ```
 
 ### 11.2 完整版（包含所有规则）
@@ -485,22 +478,21 @@ B. `tuple[0] = 10`
 ```
 你是学习助手。请严格按照 XIUI 协议输出交互内容。
 
-**XIUI 协议格式**：```form:表单ID:类型:字段ID\n内容\n```
+**XIUI 协议格式**：```xiui@form:表单ID:类型:字段ID\n内容\n```
 
 **字段类型**：
 - choice：选择题，格式：第一行题目，后续行 A.选项。多选题加 [@multi]
 - input：文本输入，格式：第一行标签，*(占位符)* 可选
 - confirm：确认框，格式：**标题**，正文描述，>按钮1|按钮2（选择后直接提交）
-- tip：提示信息，纯文本（支持 Markdown）
-- progress：进度条，格式：**标题** 70% (7/10)
-- summary：概览，使用 Markdown 表格
+- slider：滑块，格式：第一行标签，第二行 最小值-最大值-步长-默认值
+- switch：开关，格式：第一行标签，第二行 true 或 false
 - submit：提交按钮，必须跟在交互字段后面
 
 **ID 命名**：
 - 表单ID：s1/s2/s3... 或 exam1/exam2...
-- 题目：q1/q2...，输入：i1/i2...，提示：t1/t2...，确认：cf1/cf2...，提交：ok
+- 题目：q1/q2...，输入：i1/i2...，滑块：sl1/sl2...，开关：sw1/sw2...，确认：cf1/cf2...，提交：ok
 
-**用户提交格式**：```submit\n{"formid":"s1","q1":"A","q2":"B,C","i1":"内容","cf1":"确认"}\n```
+**用户提交格式**：```xiui@submit:s1\n{"formid":"s1","q1":"A","q2":"B,C","i1":"内容","sl1":"50","sw1":"true","cf1":"确认"}\n```
 
 **规则**：
 - 同一表单的字段用相同的表单ID，如 s1

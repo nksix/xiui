@@ -2,33 +2,33 @@
  * XIUI v3 — 聊天流式 UI SDK
  *
  * 协议格式（fenced code block）:
- *   ```form:form_id:type:type_id
+ *   ```xiui@form:form_id:type:type_id
  *   内容行1
  *   内容行2
  *   ```
  *
  * 示例:
- *   ```form:s1:choice:q1
+ *   ```xiui@form:s1:choice:q1
  *   题目？
  *   A. 选项A
  *   B. 选项B
  *   ```
  *
- * 提交格式:
- *   ```submit
+ * 提交格式（用户 → AI）:
+ *   ```xiui@submit
  *   {"formid":"s1","q1":"A"}
  *   ```
  *
  * 核心概念：
  *   - formId（表单ID）: 从协议中解析，如 's1', 'exam1'，用于汇聚表单
- *   - type（字段类型）: 从协议中解析，如 'choice', 'input', 'tip'
+ *   - type（字段类型）: 从协议中解析，如 'choice', 'input', 'slider', 'switch'
  *   - typeId（字段ID）: 从协议中解析，如 'q1', 'i1'，用于唯一标识字段
  *   - parsed（结构化数据）: parse() 解析后的结果
  *   - value（字段值）: 用户交互后设置的值
  */
 
-// 兼容 card:type:id 和 form:formId:type:id，容忍 [@attr] 前的空格
-const CARD_FENCE_RE = /^```(?:card|form):(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+)\])?\s*$/;
+// 严格匹配 xiui@form:表单ID:类型:字段ID，容忍 [@attr] 前的空格
+const CARD_FENCE_RE = /^```xiui@form:(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+)\])?\s*$/;
 const FENCE_END_RE  = /^```\s*$/;
 
 export class XIUIPlugin {
@@ -59,19 +59,9 @@ class ChoicePlugin extends XIUIPlugin {
   }
 }
 
-class TipPlugin extends XIUIPlugin {
+class InputPlugin extends XIUIPlugin {
   parse(lines) {
-    return { body: lines.map(l => l.replace(/^>\s*/, '')).join('\n') };
-  }
-}
-
-class ProgressPlugin extends XIUIPlugin {
-  parse(lines) {
-    const line = lines[0] || '';
-    const tm = line.match(/\*\*(.+?)\*\*/);
-    const pm = line.match(/(\d+)%/);
-    const lm = line.match(/([\d]+\/[\d]+)/);
-    return { title: tm?.[1] || '', progress: pm ? parseInt(pm[1]) / 100 : 0, label: lm?.[1] || '' };
+    return { title: lines[0] || '', placeholder: (lines[1] || '').replace(/^\*\(|\)\*$/g, '') };
   }
 }
 
@@ -79,38 +69,25 @@ class SubmitPlugin extends XIUIPlugin {
   parse(lines) { return { label: lines[0] || '提交' }; }
 }
 
-class InputPlugin extends XIUIPlugin {
+class SliderPlugin extends XIUIPlugin {
   parse(lines) {
-    return { title: lines[0] || '', placeholder: (lines[1] || '').replace(/^\*\(|\)\*$/g, '') };
+    const title = lines[0] || '';
+    const parts = (lines[1] || '0-100-1-50').split('-');
+    return {
+      title,
+      min: parseFloat(parts[0]) || 0,
+      max: parseFloat(parts[1]) || 100,
+      step: parseFloat(parts[2]) || 1,
+      value: parts.length >= 4 ? parseFloat(parts[3]) : parseFloat(parts[0]) || 0
+    };
   }
 }
 
-class SummaryPlugin extends XIUIPlugin {
+class SwitchPlugin extends XIUIPlugin {
   parse(lines) {
-    const isSep = l => /^\|[\s\-:]+\|/.test(l);
-    const sepIdx = lines.findIndex(l => isSep(l));
-
-    if (sepIdx > 0 && sepIdx < lines.length - 1) {
-      // 有表头：分隔行之前是表头，之后是数据
-      const headerLines = lines.slice(0, sepIdx).filter(l => l.startsWith('|'));
-      const dataLines = lines.slice(sepIdx + 1).filter(l => l.startsWith('|') && !isSep(l));
-      const headers = headerLines.flatMap(l =>
-        l.split('|').filter(Boolean).map(s => s.trim())
-      );
-      const items = dataLines.map(l => ({
-        cols: l.split('|').filter(Boolean).map(s => s.trim())
-      }));
-      return { headers, items };
-    }
-
-    // 无表头（简洁格式）：每行独立为 label/value 对
-    const rows = lines.filter(l => l.startsWith('|') && !isSep(l));
-    const headers = null;
-    const items = rows.map(r => {
-      const cols = r.split('|').filter(Boolean).map(s => s.trim());
-      return { cols };
-    });
-    return { headers, items };
+    const title = lines[0] || '';
+    const defVal = (lines[1] || 'false').toLowerCase();
+    return { title, value: defVal === 'true' };
   }
 }
 
@@ -125,11 +102,10 @@ class ConfirmPlugin extends XIUIPlugin {
 
 const BUILTIN_PLUGINS = {
   choice: new ChoicePlugin(),
-  tip: new TipPlugin(),
-  progress: new ProgressPlugin(),
-  submit: new SubmitPlugin(),
   input: new InputPlugin(),
-  summary: new SummaryPlugin(),
+  submit: new SubmitPlugin(),
+  slider: new SliderPlugin(),
+  switch: new SwitchPlugin(),
   confirm: new ConfirmPlugin()
 };
 
@@ -223,14 +199,11 @@ export class XIUIChat {
   _replaceCardBlocks(container) {
     const codes = container.querySelectorAll('pre code');
     codes.forEach(code => {
-      // 兼容 language-card:type:id 和 language-form:formId:type:id
-      const m = code.className.match(/language-(?:card|form):(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+?)\])?/);
+      const m = code.className.match(/language-xiui@form:(\w+):(\w+):(\w+)\s*(?:\[@(.+?)\])?/);
       if (!m) return;
       const pre = code.parentElement;
       const rawText = this._dec(code.innerHTML);
-      const card = m[3] !== undefined
-        ? this._build(m[1], m[2], m[3], m[4], rawText)
-        : this._build('default', m[1], m[2], m[4], rawText);
+      const card = this._build(m[1], m[2], m[3], m[4], rawText);
       const el = document.createElement('div');
       el.className = `card card-${card.type}`;
       el.dataset.formId = card.formId;
@@ -249,15 +222,8 @@ export class XIUIChat {
         const m = line.match(CARD_FENCE_RE);
         if (m) {
           this._state = 'card';
-          if (m[3] !== undefined) {
-            // form:formId:type:id
-            this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
-            if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
-          } else {
-            // card:type:id
-            this._cardInfo = { formId: 'default', type: m[1], typeId: m[2], attrs: this._parseAttrs(m[4]) };
-            if (this._onCardBegin) this._onCardBegin('default', m[1], m[2]);
-          }
+          this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
+          if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
           this._cardBuf = '';
           if (this._onText) this._onText(this._textBuf);
           return;
@@ -268,6 +234,7 @@ export class XIUIChat {
         if (FENCE_END_RE.test(line)) {
           this._emit();
           this._state = 'text';
+          this._textBuf = '';
           return;
         }
         this._cardBuf += line + '\n';
@@ -321,6 +288,8 @@ export class XIUIChat {
     } else {
       if (card.text && this.md) {
         el.innerHTML = this.md.render(card.text);
+      } else if (card.text) {
+        el.textContent = card.text;
       }
     }
     el._xiui_card = card;
@@ -345,7 +314,7 @@ export class XIUIChat {
   }
 
   validate(formId) {
-    const requiredTypes = ['choice', 'input'];
+    const requiredTypes = ['choice', 'input', 'slider', 'switch', 'confirm'];
     const missing = [];
     for (const card of this._cards) {
       if (formId && card.formId !== formId) continue;
@@ -440,4 +409,4 @@ export class XIUIChat {
   }
 }
 
-export { BUILTIN_PLUGINS, ChoicePlugin, TipPlugin, ProgressPlugin, SubmitPlugin, InputPlugin, SummaryPlugin, ConfirmPlugin };
+export { BUILTIN_PLUGINS, ChoicePlugin, InputPlugin, SubmitPlugin, SliderPlugin, SwitchPlugin, ConfirmPlugin };

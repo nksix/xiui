@@ -58,7 +58,7 @@
     <div class="bar">
       <select id="ds">
         <option value="basic">基础</option><option value="math">公式</option><option value="multiple">多卡片</option>
-        <option value="form">表单</option><option value="summary">总结</option><option value="confirm">确认</option>
+        <option value="form">表单</option><option value="slider">滑块</option><option value="switch">开关</option><option value="confirm">确认</option>
         <option value="complex">复杂</option>
       </select>
       <button onclick="run()">加载</button>
@@ -129,9 +129,24 @@
           };
         }
       },
-      summary: {
+      slider: {
         render(card, el) {
-          el.innerHTML = `<table class="sum-tbl">${((card.data||{}).items||[]).map(i => `<tr><td>${i.label}</td><td>${i.value}</td></tr>`).join('')}</table>`;
+          const d = card.data || {};
+          el.innerHTML = `<div class="slider-wrap"><label>${d.title}</label><input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${d.value}" class="sld" /><span class="sld-val">${d.value}</span></div>`;
+          const input = el.querySelector('input');
+          const span = el.querySelector('.sld-val');
+          input.oninput = () => { span.textContent = input.value; card.setValue(String(input.value)); };
+          card.setValue(String(d.value));
+        }
+      },
+      switch: {
+        render(card, el) {
+          const d = card.data || {};
+          el.innerHTML = `<div class="switch-wrap"><label>${d.title}</label><input type="checkbox" class="chk" ${d.value ? 'checked' : ''} /><span class="chk-label">${d.value ? '开启' : '关闭'}</span></div>`;
+          const input = el.querySelector('input');
+          const span = el.querySelector('.chk-label');
+          input.onchange = () => { const v = String(input.checked); span.textContent = v === 'true' ? '开启' : '关闭'; card.setValue(v); };
+          card.setValue(String(d.value));
         }
       },
       confirm: {
@@ -193,13 +208,14 @@
     };
 
     const datasets = {
-      basic: ['今天学习 **可变类型** 和 **不可变类型**。','','```card:choice:c1','哪个是可变类型？','- A. 整数 int $$ a^2+b^2=c^2 $$','- B. 字符串 str','- C. 列表 list','- D. 元组 tuple','```','','```card:tip:t1','> 💡 可变类型可以原地修改，不可变类型每次修改都创建新对象。','```','','```card:progress:p1','**学习进度** 50% (1/2)','```','','```card:submit:s1','提交答案','```'],
-      math: ['常用数学公式：','','**二次求根：** $$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$','','**勾股定理：** $$ a^2 + b^2 = c^2 $$','','```card:choice:m1','方程 $$x^2+2x+1=0$$ 的解？','- A. $$x=1$$','- B. $$x=-1$$','- C. $$x=\\pm 1$$','- D. 无解','```','','```card:tip:mt','> 判别式 $$\\Delta = b^2-4ac$$，$$\\Delta=0$$ 有唯一解。','```','','```card:submit:ms','提交','```'],
-      multiple: ['综合测试：','','```card:choice:q1','HTML 缩写？','- A. HyperText Markup Language','- B. HighTech Modern Language','- C. HyperText Management Language','- D. High Tech Markup Language','```','','```card:choice:q2','CSS 缩写？','- A. Computer Style Sheets','- B. Creative Style System','- C. Cascading Style Sheets','- D. Colorful Style Sheets','```','','```card:choice:q3','JS 类型？','- A. 编译型','- B. 解释型','- C. 静态类型','- D. 强类型','```','','```card:progress:mp','**进度** 100% (3/3)','```','','```card:submit:ms2','提交','```'],
-      form: ['填写表单：','','```card:input:name','姓名','*(真实姓名)*','```','','```card:input:email','邮箱','*(有效邮箱)*','```','','```card:choice:gender','性别','- A. 男','- B. 女','- C. 其他','```','','```card:submit:fs','提交','```'],
-      summary: ['学习总结','','```card:summary:s1','| 时长 | 2小时 |','| 知识点 | 5个 |','```','','```card:summary:s2','| 正确率 | 80% |','| 排名 | 第5名 |','```','','恭喜完成！'],
-      confirm: ['即将提交：','','```card:confirm:cf','**确认提交？**','提交后无法修改','> 确认 | 取消','```'],
-      complex: ['复杂内容卡片：','','```card:tip:cx','## 展示','','### 代码','~~~python','def fib(n):','    if n<=1: return n','    return fib(n-1)+fib(n-2)','~~~','','### 公式','欧拉：$$ e^{i\\pi}+1=0 $$','','### 表格','| 语言 | 用途 |','|------|------|','| Python | 数据科学 |','| JS | Web开发 |','```','','```card:choice:cq','Python 安装命令？','- A. `npm install python`','- B. `pip install python`','- C. `apt-get install python3`','- D. `brew install python`','```','','```card:submit:cs','提交','```']
+      basic: ['今天学习 **可变类型** 和 **不可变类型**。','','```xiui@form:choice:c1','哪个是可变类型？','- A. 整数 int $$ a^2+b^2=c^2 $$','- B. 字符串 str','- C. 列表 list','- D. 元组 tuple','```','','```xiui@form:slider:sl1','学习强度','1-10-1-5','```','','```xiui@form:submit:s1','提交答案','```'],
+      math: ['常用数学公式：','','**二次求根：** $$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$','','**勾股定理：** $$ a^2 + b^2 = c^2 $$','','```xiui@form:choice:m1','方程 $$x^2+2x+1=0$$ 的解？','- A. $$x=1$$','- B. $$x=-1$$','- C. $$x=\\pm 1$$','- D. 无解','```','','```xiui@form:submit:ms','提交','```'],
+      multiple: ['综合测试：','','```xiui@form:choice:q1','HTML 缩写？','- A. HyperText Markup Language','- B. HighTech Modern Language','- C. HyperText Management Language','- D. High Tech Markup Language','```','','```xiui@form:choice:q2','CSS 缩写？','- A. Computer Style Sheets','- B. Creative Style System','- C. Cascading Style Sheets','- D. Colorful Style Sheets','```','','```xiui@form:choice:q3','JS 类型？','- A. 编译型','- B. 解释型','- C. 静态类型','- D. 强类型','```','','```xiui@form:submit:ms2','提交','```'],
+      form: ['填写表单：','','```xiui@form:input:name','姓名','*(真实姓名)*','```','','```xiui@form:input:email','邮箱','*(有效邮箱)*','```','','```xiui@form:choice:gender','性别','- A. 男','- B. 女','- C. 其他','```','','```xiui@form:submit:fs','提交','```'],
+      slider: ['系统设置：','','```xiui@form:slider:sl1','音量','0-100-1-70','```','','```xiui@form:slider:sl2','亮度','0-100-1-50','```','','```xiui@form:submit:sb','保存','```'],
+      switch: ['通知设置：','','```xiui@form:switch:sw1','每日提醒','true','```','','```xiui@form:switch:sw2','邮件通知','false','```','','```xiui@form:submit:sd','保存','```'],
+      confirm: ['即将提交：','','```xiui@form:confirm:cf','**确认提交？**','提交后无法修改','> 确认 | 取消','```'],
+      complex: ['综合配置：','','```xiui@form:choice:cq','Python 安装命令？','- A. `npm install python`','- B. `pip install python`','- C. `apt-get install python3`','- D. `brew install python`','```','','```xiui@form:slider:sl3','难度','1-5-1-3','```','','```xiui@form:switch:sw3','开启提示','true','```','','```xiui@form:submit:cs','提交','```']
     };
     run();
   </script>

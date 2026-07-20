@@ -22,33 +22,25 @@ const chat = new XIUIChat({
   onCard: (card, el) => { /* 卡片就绪 */ }
 });
 
-chat.feed('```card:choice:c1\n题目？\n- A. 选项A\n```');
+chat.feed('```xiui@form:choice:c1\n题目？\n- A. 选项A\n```');
 chat.flush();
 </script>
 ```
 
 ## 协议格式
 
-使用 fenced code block 定义卡片，支持两种格式：
+使用 fenced code block 定义卡片：
 
-**标准格式（推荐）**：
 ```markdown
-```form:表单ID:类型:字段ID[@属性]
-内容
-```
-```
-
-**兼容格式**：
-```markdown
-```card:类型:字段ID
+```xiui@form:表单ID:类型:字段ID[@属性]
 内容
 ```
 ```
 
 | 格式 | 参数 | 说明 |
 |------|------|------|
-| 标准 | `form:formId:type:typeId` | formId 汇聚同一表单，typeId 唯一标识字段 |
-| 兼容 | `card:type:typeId` | formId 自动设为 `default`，兼容旧写法 |
+| 标准 | `xiui@form:formId:type:typeId` | formId 汇聚同一表单，typeId 唯一标识字段 |
+| 兼容 | `xiui@form:type:typeId` | formId 自动设为 `default`，兼容旧写法 |
 
 **属性语法**：在字段 ID 后追加 `[@attr]` 或 `[@key:val]`，多个属性用 `@` 连接：
 - `[@multi]` — 标记为多选（choice 专用），等价于 `{multi: true}`
@@ -58,7 +50,7 @@ chat.flush();
 
 ```markdown
 标准格式（多选题）：
-```form:s1:choice:q2[@multi]
+```xiui@form:s1:choice:q2[@multi]
 下列哪些是可变类型？（多选）
 A. 列表
 B. 字符串
@@ -67,7 +59,7 @@ D. 元组
 ```
 
 兼容格式（默认 formId='default'）：
-```card:choice:c1
+```xiui@form:choice:c1
 哪个是可变类型？
 A. 整数 int
 B. 字符串 str
@@ -143,7 +135,7 @@ card = {
 
 | 字段 | 来源 | 说明 |
 |------|------|------|
-| `formId` | 协议 `form:formId:type:typeId` | 汇聚同一表单（兼容格式默认 `default`） |
+| `formId` | 协议 `xiui@form:formId:type:typeId` | 汇聚同一表单（兼容格式默认 `default`） |
 | `type` | 协议 | 卡片类型 |
 | `typeId` | 协议 | 卡片唯一标识 |
 | `data` | 插件 `parse(lines)` | 解析后的结构化数据 |
@@ -163,7 +155,7 @@ card = {
 **步骤 1：定义协议**
 
 ```markdown
-```card:poll:p1
+```xiui@form:poll:p1
 **今天吃什么？**
 - 🍔 汉堡
 - 🍕 披萨
@@ -275,24 +267,24 @@ const chat = new XIUIChat({
 | 插件类 | 卡片类型 | 说明 |
 |--------|----------|------|
 | `ChoicePlugin` | choice | 选择题，支持单选/多选（`[@multi]`） |
-| `TipPlugin` | tip | 提示卡片，渲染 Markdown 内容 |
-| `ProgressPlugin` | progress | 进度条，解析标题、百分比、标签 |
-| `SubmitPlugin` | submit | 提交按钮，收集同一 formId 的字段值 |
 | `InputPlugin` | input | 文本输入，解析标签和占位符 |
-| `SummaryPlugin` | summary | 表格展示，自动识别表头（`|---|`）并渲染 `<th>` |
 | `ConfirmPlugin` | confirm | 确认对话框，选择后直接提交 |
+| `SliderPlugin` | slider | 滑块，解析标签和 `min-max-step-value` |
+| `SwitchPlugin` | switch | 开关，解析标签和默认状态 `true/false` |
+| `SubmitPlugin` | submit | 提交按钮，收集同一 formId 的字段值 |
 
 ## 示例数据集
 
 | 名称 | 说明 |
 |------|------|
-| basic | 基础选择题 + 提示 + 进度条 |
-| math | 公式渲染测试 |
-| multiple | 多卡片验证测试 |
-| form | 表单输入测试 |
-| summary | 总结卡片测试 |
-| confirm | 确认对话框测试 |
-| complex | 复杂内容（代码、公式、表格）测试 |
+| basic | 选择题 + 滑块 |
+| math | 公式渲染 + 选择题 |
+| multiple | 多卡片选择题 |
+| form | 表单输入 + 选择 |
+| slider | 滑块调节 |
+| switch | 开关设置 |
+| confirm | 确认对话框 |
+| complex | 综合：选择 + 滑块 + 开关 |
 
 ## 技术栈
 

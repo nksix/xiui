@@ -45,7 +45,7 @@ export class MessageManager {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
 
-      if (msg.role === 'assistant' && msg.content.includes('<!-- card:')) {
+      if (msg.role === 'assistant' && msg.content.includes('<!-- xiui@form:')) {
         const next = messages[i + 1];
         if (next && next.role === 'user' && this._isInteractionEvent(next.content)) {
           compressed.push({
@@ -82,8 +82,10 @@ export class MessageManager {
         parts.push(`选择了${event.cards[card.id]}`);
       } else if (card.type === 'input' && event.cards?.[card.id]) {
         parts.push(`输入了：${event.cards[card.id]}`);
-      } else if (card.type === 'tip') {
-        parts.push(`展示了「${card.title}」`);
+      } else if (card.type === 'slider' && event.cards?.[card.id]) {
+        parts.push(`调节了「${card.title}」为${event.cards[card.id]}`);
+      } else if (card.type === 'switch' && event.cards?.[card.id]) {
+        parts.push(`设置了「${card.title}」为${event.cards[card.id] === 'true' ? '开启' : '关闭'}`);
       }
     }
 
@@ -92,7 +94,7 @@ export class MessageManager {
 
   _extractCards(content) {
     const cards = [];
-    const regex = /<!-- card:(\w+):(\w+)(?:\[@.+?\])? -->/g;
+    const regex = /<!-- xiui@form:(\w+):(\w+)(?:\[@.+?\])? -->/g;
     let match;
     while ((match = regex.exec(content))) {
       cards.push({ type: match[1], id: match[2] });

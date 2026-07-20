@@ -55,6 +55,16 @@
     .pfill { height:100%; background:linear-gradient(90deg,var(--accent),#7c3aed); border-radius:4px; transition:width .5s; }
     .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
     .card-input:focus { border-color:var(--accent); }
+    .slider-wrap { display:flex; align-items:center; gap:12px; margin-top:8px; }
+    .card-slider { flex:1; -webkit-appearance:none; height:6px; border-radius:3px; background:var(--bg3); outline:none; }
+    .card-slider::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; }
+    .slider-val { min-width:32px; text-align:center; font-weight:600; color:var(--accent); font-size:15px; }
+    .switch-wrap { display:inline-flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer; }
+    .card-toggle { display:none; }
+    .switch-track { width:44px; height:24px; border-radius:12px; background:var(--border); position:relative; transition:background .2s; }
+    .switch-track::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .2s; }
+    .card-toggle:checked + .switch-track { background:var(--accent); }
+    .card-toggle:checked + .switch-track::after { transform:translateX(20px); }
     .card-invalid { animation:shake .4s; border-color:#ef4444 !important; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
     .card-invalid .opt { border-color:#ef4444; }
     @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
@@ -81,6 +91,9 @@
     .status { font-size:12px; color:var(--mute); margin-top:8px; }
     .status.error { color:#ef4444; }
     .status.success { color:#22c55e; }
+    .dbg-bar { display:flex; gap:6px; justify-content:flex-end; margin-top:8px; }
+    .dbg-btn { padding:2px 10px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; }
+    .dbg-btn.on { background:rgba(102,126,234,.2); color:var(--accent); border-color:var(--accent); }
   </style>
 </head>
 <body>
@@ -172,6 +185,26 @@
       tip: {
         render(card, el) { el.innerHTML = mkmd((card.data||{}).body||''); }
       },
+      slider: {
+        render(card, el) {
+          const d = card.data||{};
+          el.innerHTML = `${mkmd(d.title||'')}<div class="slider-wrap"><input type="range" class="card-slider" min="${d.min||0}" max="${d.max||100}" step="${d.step||1}" value="${d.value??50}"><span class="slider-val">${d.value??50}</span></div>`;
+          const inp = el.querySelector('input');
+          const val = el.querySelector('.slider-val');
+          inp.oninput = () => { val.textContent = inp.value; card.setValue(inp.value); };
+          card.setValue(String(d.value??50));
+        }
+      },
+      switch: {
+        render(card, el) {
+          const d = card.data||{};
+          const on = d.value === true || d.value === 'true';
+          el.innerHTML = `${mkmd(d.title||'')}<label class="switch-wrap"><input type="checkbox" class="card-toggle" ${on ? 'checked' : ''}><span class="switch-track"></span></label>`;
+          const cb = el.querySelector('input');
+          cb.onchange = () => card.setValue(cb.checked ? 'true' : 'false');
+          card.setValue(on ? 'true' : 'false');
+        }
+      },
       progress: {
         render(card, el) {
           const d = card.data||{};
@@ -204,9 +237,9 @@
               return;
             }
             // 禁用所有交互元素 & 显示已提交
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
             el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
-            await callAI('用户提交了答案', result.cards);
+            await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
           };
         }
       },
@@ -229,23 +262,23 @@
           el.querySelector('.btn-pri').onclick = async () => { 
             if (currentChat.isSubmitted()) return;
             card.setValue(d.confirmLabel||'confirm');
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
             el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
             const formId = card.formId;
             const result = currentChat.submit(formId);
             if (result.success) {
-              await callAI('用户提交了答案', result.cards);
+              await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
             }
           };
           el.querySelector('.btn-ghost').onclick = async () => { 
             if (currentChat.isSubmitted()) return;
             card.setValue(d.cancelLabel||'cancel');
-            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input').forEach(x => x.classList.add('disabled'));
+            currentBubble.querySelectorAll('.opt,.btn-submit,.btn-pri,.btn-ghost,.card-input,.card-slider,.switch-wrap').forEach(x => x.classList.add('disabled'));
             el.innerHTML = '<span class="submitted-tag">✓ 已提交</span>';
             const formId = card.formId;
             const result = currentChat.submit(formId);
             if (result.success) {
-              await callAI('用户提交了答案', result.cards);
+              await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
             }
           };
         }
@@ -277,13 +310,26 @@
     }
 
     function createChat(bubble) {
+      let cardCount = 0, textSeg = 0;
       currentChat = new XIUIChat({
         cards: cardDefs,
         autoFlush: 2000,
         onText: t => {
-          let tb = bubble.querySelector('.text-block');
-          if (!tb) { tb = document.createElement('div'); tb.className = 'text-block'; bubble.appendChild(tb); }
-          tb.innerHTML = mkmd(t); scrollToBottom();
+          if (!t) return;
+          // 卡片之后新建 text-block，确保文字排在对应卡片之后
+          if (textSeg < cardCount) {
+            textSeg = cardCount;
+            const tb = document.createElement('div');
+            tb.className = 'text-block';
+            const lastCard = bubble.querySelector('.card:last-of-type');
+            if (lastCard) lastCard.after(tb); else bubble.appendChild(tb);
+            tb.innerHTML = mkmd(t);
+          } else {
+            let tb = bubble.querySelector('.text-block:last-of-type');
+            if (!tb) { tb = document.createElement('div'); tb.className = 'text-block'; bubble.appendChild(tb); }
+            tb.innerHTML = mkmd(t);
+          }
+          scrollToBottom();
         },
         onCardBegin: () => {
           const skeleton = document.createElement('div');
@@ -300,6 +346,7 @@
           pv.innerHTML = mkmd(t); scrollToBottom();
         },
         onCard: (card, el) => {
+          cardCount++;
           const sk = bubble.querySelector('.sk');
           const pv = bubble.querySelector('.pv');
           if (sk) sk.remove();
@@ -330,7 +377,7 @@
       await send();
     }
 
-    async function callAI(message, cardData = {}) {
+    async function callAI(message) {
       isSending = true;
       sendBtn.disabled = true;
       statusEl.textContent = 'AI 思考中...';
@@ -351,7 +398,6 @@
           body: JSON.stringify({
             message,
             history: chatHistory.slice(-10),
-            cardData
           })
         });
 
@@ -427,6 +473,30 @@
 
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: aiResponse });
+
+        // 调试面板：渲染 / 原始 视图切换
+        const rawView = document.createElement('pre');
+        rawView.className = 'raw-view';
+        rawView.style.cssText = 'display:none;white-space:pre-wrap;word-break:break-word;font-size:13px;margin:8px 0;padding:12px;background:var(--bg);border-radius:8px;font-family:Monaco,monospace;';
+        rawView.textContent = aiResponse;
+        bubble.appendChild(rawView);
+
+        const dbgBar = document.createElement('div');
+        dbgBar.className = 'dbg-bar';
+        dbgBar.innerHTML = '<button class="dbg-btn on" data-mode="render">渲染</button><button class="dbg-btn" data-mode="raw">原始</button>';
+        bubble.appendChild(dbgBar);
+
+        dbgBar.querySelectorAll('button').forEach(btn => {
+          btn.onclick = () => {
+            dbgBar.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+            btn.classList.add('on');
+            const isRaw = btn.dataset.mode === 'raw';
+            rawView.style.display = isRaw ? '' : 'none';
+            bubble.querySelectorAll('.text-block,.card,.reasoning-block,.sk,.pv').forEach(el => {
+              el.style.display = isRaw ? 'none' : '';
+            });
+          };
+        });
         statusEl.textContent = '就绪';
         statusEl.className = 'status success';
 
@@ -465,9 +535,7 @@
         '- **前端开发** (HTML/CSS/JS)',
         '- **算法与数据结构**',
         '',
-        '```card:tip:welcome',
-        '> 💡 点击下方快捷按钮开始体验，或输入你想问的问题！',
-        '```'
+        '> 💡 点击下方快捷按钮开始体验，或输入你想问的问题！'
       ];
 
       let i = 0;
