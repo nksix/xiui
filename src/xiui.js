@@ -351,7 +351,7 @@ class SubmitPlugin extends XIUIPlugin {
 // Plugin 模板表（类，非实例）
 // ═══════════════════════════════════════════════════════════
 
-const BUILTIN_PLUGINS = {
+export const BUILTIN_PLUGINS = {
   choice:  ChoicePlugin,
   input:   InputPlugin,
   submit:  SubmitPlugin,
