@@ -1,28 +1,35 @@
 # XIUI
 
-聊天流式 UI SDK，支持渐进式渲染 Markdown 和交互式卡片。
+聊天流式 UI SDK，支持渐进式渲染 Markdown 和交互式卡片。Plugin 采用 Vue/React 风格的**声明式模板 + 响应式状态**——数据变了，UI 自动变。
 
 ## 快速开始
 
 ```html
 <script type="module">
-import { XIUIChat } from 'xiui';
+import { XIUIChat, XIUIPlugin } from 'xiui';
+
+// 自定义插件：写 render() 声明 UI，afterRender() 绑定事件
+class MyChoice extends XIUIPlugin {
+  render() {
+    return this.data.options.map(o =>
+      `<span class="opt" data-id="${o.id}">${o.label}</span>`
+    ).join('');
+  }
+  afterRender(el) {
+    el.querySelectorAll('.opt').forEach(opt => {
+      opt.onclick = () => this.setValue(opt.dataset.id);
+      // setValue → 自动重渲染，无需手动更新 DOM
+    });
+  }
+}
 
 const chat = new XIUIChat({
-  cards: {
-    choice: {
-      render(card, el) {
-        el.innerHTML = card.data.question + card.data.options.map(o =>
-          `<span data-id="${o.id}">${o.label}</span>`
-        ).join('');
-      }
-    }
-  },
-  onText: text => { /* 文本更新 */ },
-  onCard: (card, el) => { /* 卡片就绪 */ }
+  md: markdownit(),
+  plugins: { choice: MyChoice }  // 注册自定义插件
 });
 
-chat.feed('```xiui@form:choice:c1\n题目？\n- A. 选项A\n```');
+chat.createStream(document.getElementById('messages'));
+chat.feed('```xiui@form:choice:c1\n题目？\nA. 选项A\nB. 选项B\n```');
 chat.flush();
 </script>
 ```
@@ -73,22 +80,27 @@ C. 列表 list
 
 ```javascript
 const chat = new XIUIChat({
-  md: markdownitInstance,    // 可选，用于批量模式渲染
-  cards: { ... },            // 卡片插件注册
+  md: markdownitInstance,    // Markdown 渲染器（推荐，自动注入）
+  plugins: { ... },          // 插件注册（类或对象）
   autoFlush: 2000,           // 空闲自动结束（毫秒），0 为禁用
+
+  // 回调（可选，覆盖内建渲染）
   onText: (text) => {},      // 文本流式更新
   onCardBegin: (formId, type, typeId) => {},   // 卡片开始 → 骨架屏
   onCardUpdate: (text) => {},      // 卡片内容预览
   onCard: (card, el) => {},        // 卡片就绪（el 已渲染）
   onDone: () => {},                // 流结束
-  onEvent: (card, type, detail) => {}  // 卡片事件
+  onEvent: (plugin, event, detail) => {}  // 卡片事件
 });
 
+// 流式渲染
+const stream = chat.createStream(container); // 创建气泡，返回 { feed, done, bubble }
 chat.feed(text);   // 流式喂入（自动 flush）
-chat.send(text);   // 立即发送并 flush（当 autoFlush=0 时）
 chat.flush();      // 手动结束流
-chat.render(text); // 批量渲染返回 HTML
-chat.mount(el, text); // 批量渲染到容器
+
+// 批量渲染
+chat.render(text);        // 返回 HTML
+chat.mount(el, text);     // 渲染到容器
 ```
 
 ### Session 状态管理
@@ -96,167 +108,105 @@ chat.mount(el, text); // 批量渲染到容器
 每个 `XIUIChat` 实例自动管理以下状态：
 
 ```javascript
-chat.setValue('typeId', 'value');   // 设置字段值（key 为 typeId）
-chat.getValue('typeId');            // 获取字段值
-chat.getAllValues();                // 获取所有字段值
-
-chat.getCards();                    // 获取所有卡片
-chat.getCards('choice');            // 获取指定类型的卡片
-
-chat.validate();                    // 校验必填字段 { valid, missing }
-chat.submit();                      // 提交表单 { success, data, cards }
-chat.submit('s1');                  // 提交指定 formId 的表单
-chat.isSubmitted();                 // 是否已提交
-chat.isSubmitted('s1');             // 指定 formId 是否已提交
-chat.reset();                       // 重置 session
+chat.submit(formId);        // 提交指定 formId 的表单 { success, data, cards }
+chat.isSubmitted(formId);   // 是否已提交
+chat.getCards(type);        // 获取卡片列表（可选类型过滤）
+chat.getPlugin(typeId);     // 获取 plugin 实例（读取值/状态）
+chat.reset();               // 重置 session
 ```
-
-### card 对象
-
-传递给 `render` 和 `event` 的卡片对象：
-
-```javascript
-card = {
-  formId: 's1',     // ← 表单 ID
-  type: 'choice',   // ← 卡片类型
-  typeId: 'q1',     // ← 字段 ID
-  data: { ... },    // ← parse() 返回的结构化数据
-  attrs: { ... },   // ← 卡片属性，如 {multi: true}
-  lines: [...],     // ← 原始行内容
-  text: '...',      // ← 原始文本
-  
-  setValue(value)    // 设置当前卡片的值
-  getValue()         // 获取当前卡片的值
-  trigger(type, detail) // 触发事件
-};
-```
-
-**数据来源总结**：
-
-| 字段 | 来源 | 说明 |
-|------|------|------|
-| `formId` | 协议 `xiui@form:formId:type:typeId` | 汇聚同一表单（兼容格式默认 `default`） |
-| `type` | 协议 | 卡片类型 |
-| `typeId` | 协议 | 卡片唯一标识 |
-| `data` | 插件 `parse(lines)` | 解析后的结构化数据 |
-| `attrs` | 协议 `[@multi@key:val]` | 属性，无值标记自动设为 `true` |
-| `value` | 用户交互 `setValue()` | 用户设置的值 |
 
 ## XIUIPlugin（插件基类）
 
-通过继承基类实现自定义卡片，三个方法形成完整的数据闭环：
+Plugin 设计哲学：**数据/逻辑/状态/事件自闭环**，像 Vue/React 组件一样独立运作。
 
 ```
-协议内容 → parse(lines) → card.data → render(card, el) → DOM事件 → setValue → submit()
+       声明式模板              响应式状态                事件绑定
+     ┌──────────┐    ┌─────────────────────┐    ┌──────────────┐
+     │ render() │    │ setValue(v) ────────→│    │ afterRender()│
+     │ 返回HTML  │←───│ 自动触发 render()+   │    │ 绑定DOM事件   │
+     └──────────┘    │   afterRender()     │    └──────────────┘
+                     └─────────────────────┘
 ```
+
+**核心方法**：
+
+| 方法 | 说明 |
+|------|------|
+| `parse(lines)` | 纯函数，协议行 → 结构化数据 |
+| `init(ctx)` | 初始化上下文，设置默认值 |
+| `render()` | 声明式模板，返回 HTML 字符串 |
+| `afterRender(el)` | DOM 就绪后绑定事件（每次重渲染后调用） |
+| `setValue(v)` | 更新状态 → **自动触发 render() + afterRender()** |
+| `getValue()` | 返回当前值 |
+| `disable()` | 标记已提交，冻结交互 |
+| `emit(event, detail)` | 向外部发送事件 |
+| `validate()` | 校验当前值是否有效 |
 
 ### 完整示例：自定义投票卡片
-
-**步骤 1：定义协议**
-
-```markdown
-```xiui@form:poll:p1
-**今天吃什么？**
-- 🍔 汉堡
-- 🍕 披萨
-- 🍜 拉面
-```
-```
-
-**步骤 2：实现插件**
 
 ```javascript
 import { XIUIPlugin } from 'xiui';
 
 class PollPlugin extends XIUIPlugin {
+  // 1. 协议解析（纯函数）
   parse(lines) {
     const titleMatch = lines[0]?.match(/\*\*(.+?)\*\*/);
     const title = titleMatch?.[1] || lines[0] || '';
     const options = [];
-    
     for (let i = 1; i < lines.length; i++) {
       const m = lines[i].match(/^- (.+?)\s+(.+)$/);
       if (m) options.push({ emoji: m[1], label: m[2], votes: 0 });
     }
-    
-    return { title, options };  // ← 返回的数据存入 card.data
+    return { title, options };
   }
 
-  render(card, el) {
-    const { title, options } = card.data;  // ← 使用 parse 解析的数据
-    
-    el.innerHTML = `
+  // 2. 声明式模板（纯函数：数据 → HTML）
+  render() {
+    const { title, options } = this.data;
+    return `
       <h3>${title}</h3>
       <div class="poll-options">
         ${options.map((opt, idx) => `
           <button data-idx="${idx}">
-            ${opt.emoji} ${opt.label} 
+            ${opt.emoji} ${opt.label}
             <span>${opt.votes}票</span>
           </button>
         `).join('')}
       </div>
     `;
+  }
 
+  // 3. 事件绑定（render 后自动调用）
+  afterRender(el) {
+    const { options } = this.data;
     el.querySelectorAll('button').forEach(btn => {
       btn.onclick = () => {
         const idx = parseInt(btn.dataset.idx);
         options[idx].votes++;
-        card.setValue(options[idx].votes);  // ← 设置卡片值
-        btn.querySelector('span').textContent = `${options[idx].votes}票`;
+        this.setValue(options[idx].votes);
+        // ↑ setValue → 自动重渲染，按钮文字自动更新
       };
     });
   }
-
-  event(card, type, detail) {
-    // type: 事件类型（如 'click', 'change'）
-    // detail: 事件详情，包含 oldValue, newValue
-    console.log(`[${card.typeId}] ${type}: ${detail.oldValue} → ${detail.newValue}`);
-  }
 }
 ```
 
-**步骤 3：注册使用**
+### 注册方式
 
 ```javascript
+// 方式一：传入 XIUIPlugin 子类（推荐）
 const chat = new XIUIChat({
-  cards: { poll: new PollPlugin() },
-  onEvent: (card, type, detail) => {
-    console.log(`[全局] ${card.id} :: ${type}`, detail);
-  }
+  md: markdownit(),
+  plugins: { poll: PollPlugin }
 });
-```
 
-### 两种注册方式
-
-**方式一：继承基类（推荐）**
-
-完全自定义 `parse`、`render`、`event`：
-
-```javascript
-class MyCardPlugin extends XIUIPlugin {
-  parse(lines) { return { /* 解析数据 */ }; }
-  render(card, el) { /* 渲染 DOM */ }
-  event(card, type, detail) { /* 处理事件 */ }
-}
-
+// 方式二：旧式对象字面量（自动包装为类，向后兼容）
 const chat = new XIUIChat({
-  cards: { mycard: new MyCardPlugin() }
-});
-```
-
-**方式二：对象字面量（覆盖部分方法）**
-
-复用内置 `parse`，仅自定义 `render`：
-
-```javascript
-const chat = new XIUIChat({
-  cards: {
+  md: markdownit(),
+  plugins: {
     choice: {
-      render(card, el) {
-        // card.data 已由内置 parse 填充
-        const { question, options } = card.data;
-        el.innerHTML = `<div>${question}</div>`;
-      }
+      parse(lines) { /* 解析 */ },
+      render(card, el) { /* card.setValue(), card.data 等旧 API */ }
     }
   }
 });
