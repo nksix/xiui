@@ -95,7 +95,10 @@
   <div class="chat-wrap">
     <div class="header">
       <h1>AI 学习助手</h1>
-      <p>基于 XIUI SDK + 大模型的流式聊天体验</p>
+      <p>基于 XIUI SDK + 大模型的流式聊天体验
+        <button class="dbg-btn" onclick="window._saveHistory?.()" style="margin-left:12px">💾 保存</button>
+        <button class="dbg-btn" onclick="window._restoreHistory?.()">📂 恢复</button>
+      </p>
     </div>
     <div class="messages" id="messages"></div>
     <div class="input-area">
@@ -134,6 +137,7 @@
 
     // ═══ 一行接入 ═══
     const chat = new XIUIChat({ md });
+    let lastAssistantIdx = -1;
 
     // Submit / Confirm → 调用 API（plugin 自闭环，只负责 UI/状态）
     chat._onEvent = async (plugin, event, detail) => {
@@ -141,8 +145,47 @@
       const formId = plugin.formId;
       const result = chat.submit(formId);
       if (!result.success) return;
+      // 捕获提交态，更新上次 AI 消息的卡片状态
+      if (lastAssistantIdx >= 0) {
+        chatHistory[lastAssistantIdx].cardState = chat.toJSON();
+      }
       await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
     };
+
+    // ── 历史保存/恢复 ──
+    const STORAGE_KEY = 'xiui_chat_history';
+    let savedCardState = null; // 提交后暂存的卡片状态
+
+    function saveHistory() {
+      const data = { history: chatHistory, timestamp: Date.now() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      statusEl.textContent = '会话已保存';
+      statusEl.className = 'status success';
+      setTimeout(() => { statusEl.textContent = '就绪'; statusEl.className = 'status'; }, 2000);
+    }
+
+    function restoreHistory() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) { statusEl.textContent = '无保存的历史'; statusEl.className = 'status error'; return; }
+      const data = JSON.parse(raw);
+      if (!data.history || !data.history.length) return;
+      messagesEl.innerHTML = '';
+      chatHistory = [];
+      for (const msg of data.history) {
+        if (msg.role === 'user') {
+          addUserMsg(msg.content);
+          chatHistory.push(msg);
+        } else {
+          chatHistory.push(msg);
+          chat.renderMessage(messagesEl, msg.content, msg.cardState);
+        }
+      }
+      statusEl.textContent = '历史已恢复';
+      statusEl.className = 'status success';
+      setTimeout(() => { statusEl.textContent = '就绪'; statusEl.className = 'status'; }, 2000);
+    }
+    window._saveHistory = saveHistory;
+    window._restoreHistory = restoreHistory;
 
     function addUserMsg(text) {
       const msg = document.createElement('div');
@@ -242,6 +285,7 @@
 
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: aiResponse });
+        lastAssistantIdx = chatHistory.length - 1;  // 待提交后补 cardState
 
         // 调试面板
         const rawView = document.createElement('pre');

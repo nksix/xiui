@@ -836,6 +836,65 @@ export class XIUIChat {
     return card ? card.plugin : null;
   }
 
+  // ─── 状态序列化 / 恢复 ─────────────────────────
+
+  /** 导出当前所有卡片状态（JSON 安全） */
+  toJSON() {
+    const forms = {};
+    for (const card of this._cards) {
+      if (!forms[card.formId]) forms[card.formId] = { cards: {} };
+      forms[card.formId].cards[card.typeId] = {
+        type: card.type,
+        value: card.plugin.getValue()
+      };
+    }
+    for (const card of this._cards) {
+      if (card._submitted) {
+        if (forms[card.formId]) forms[card.formId].submitted = true;
+      }
+    }
+    return { forms };
+  }
+
+  /** 从 JSON 恢复卡片值和提交态（需先渲染卡片） */
+  restore(json) {
+    if (!json || !json.forms) return;
+    for (const [formId, form] of Object.entries(json.forms)) {
+      const formCards = this._cards.filter(c => c.formId === formId);
+      for (const [typeId, st] of Object.entries(form.cards || {})) {
+        const card = formCards.find(c => c.typeId === typeId);
+        if (!card || !card.plugin) continue;
+        if (st.value !== undefined && st.value !== null) {
+          card.plugin._value = st.value;
+        }
+        card.plugin.refresh();
+      }
+      if (form.submitted) {
+        formCards.forEach(c => c.plugin.disable());
+      }
+    }
+  }
+
+  /** 非流式渲染一条消息（用于历史恢复），可选传入卡片状态 */
+  renderMessage(container, text, cardState) {
+    XIUIChat._injectStyle();
+    const ct = typeof container === 'string' ? document.querySelector(container) : container;
+    if (!ct) throw new Error('[XIUI] renderMessage: container not found');
+
+    const msg = document.createElement('div');
+    msg.className = 'x-msg';
+    msg.innerHTML = '<div class="x-avatar">AI</div><div class="x-bubble"></div>';
+    ct.appendChild(msg);
+
+    const bubble = msg.querySelector('.x-bubble');
+    this._bubble = bubble;
+    this.reset();
+    bubble.innerHTML = this._mdRender(text);
+    this._replaceCardBlocks(bubble);
+    if (cardState) this.restore(cardState);
+    return { msg, bubble, cards: this._cards };
+  }
+
   // ─── 工具 ────────────────────────────────────
 
   _dec(html) {
