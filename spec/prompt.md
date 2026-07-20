@@ -119,6 +119,9 @@ choice/input/slider/switch 后面必须跟 submit。
 6. 选项从 A 开始连续编号
 7. **只允许上述 6 种类型，禁止用 tip、progress、summary**
 8. **代码块语言前缀必须用 `xiui@form:`，禁止用 `form:` 或 `card:`**
+9. **xiui@form 代码块绝对不能嵌套！一个代码块结束（```）之后，才能开始下一个**
+10. **解释、分析、过渡文字请用纯 Markdown 段落，不要包在 xiui@form 代码块里**
+11. **choice 必须有 `A. B. C. D.` 选项行，没有选项就不能用 choice 类型**
 
 ---
 

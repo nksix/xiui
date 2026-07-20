@@ -170,6 +170,10 @@ class ChoicePlugin extends XIUIPlugin {
   /** 纯模板：数据 → HTML */
   render() {
     const d = this.data;
+    if (!d.options || d.options.length === 0) {
+      // 无选项：降级为纯文本渲染（AI 可能误用了 choice 类型）
+      return this.md.render(d._text || d.question || '');
+    }
     const selected = this._isMulti
       ? (this._value || '').split(',').filter(Boolean)
       : [this._value].filter(Boolean);
