@@ -856,7 +856,8 @@ export class XIUIChat {
     return { forms };
   }
 
-  /** 从 JSON 恢复卡片值和提交态（需先渲染卡片） */
+  /** 从 JSON 恢复卡片值和提交态（需先渲染卡片）
+   *  只恢复值（选项高亮、滑块位置等），不冻结交互——让用户可以从恢复点继续操作。 */
   restore(json) {
     if (!json || !json.forms) return;
     for (const [formId, form] of Object.entries(json.forms)) {
@@ -868,9 +869,6 @@ export class XIUIChat {
           card.plugin._value = st.value;
         }
         card.plugin.refresh();
-      }
-      if (form.submitted) {
-        formCards.forEach(c => c.plugin.disable());
       }
     }
   }
