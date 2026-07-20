@@ -46,9 +46,16 @@ app.post('/api/chat', async (req, res) => {
   try {
     const userMessage = message + '\n\n遵循 XIUI 协议 回复';
 
+    // 过滤 history 中与当前 message 内容相同的 user 消息，避免重复发送
+    const cleanHistory = parsedHistory.filter(h => {
+      if (!h || !h.content) return false;
+      if (h.role === 'user' && h.content.trim() === message.trim()) return false;
+      return true;
+    });
+
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...parsedHistory.filter(h => h && h.content).map(h => ({
+      ...cleanHistory.map(h => ({
         role: h.role === 'user' ? 'user' : 'assistant',
         content: h.role === 'assistant'
           ? h.content.replace(/```form:/g, '```xiui@form:')
@@ -103,7 +110,7 @@ app.post('/api/chat', async (req, res) => {
         buf = buf.replace(/```form:/g, '```xiui@form:');
         // 保留可能被流式截断的 ``` 前缀，其余发出
         let hold = 0;
-        const prefixes = ['`', '``', '```'];
+        const prefixes = ['```', '``', '`'];
         for (const p of prefixes) {
           if (buf.endsWith(p) && buf.length > p.length) { hold = p.length; break; }
         }

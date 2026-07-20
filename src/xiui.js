@@ -15,7 +15,7 @@
  *   ```
  *
  * 提交格式（用户 → AI）:
- *   ```xiui@submit
+ *   ```xiui@submit:formid
  *   {"formid":"s1","q1":"A"}
  *   ```
  *
@@ -191,6 +191,7 @@ export class XIUIChat {
       } else {
         this._emit();
       }
+      this._textBuf = '';
     }
     this._state = 'text';
     if (this._onDone) this._onDone();
@@ -225,7 +226,7 @@ export class XIUIChat {
           this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
           if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);
           this._cardBuf = '';
-          if (this._onText) this._onText(this._textBuf);
+          this._textBuf = '';
           return;
         }
         this._textBuf += line + '\n';

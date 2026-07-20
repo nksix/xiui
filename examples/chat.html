@@ -45,7 +45,8 @@
     .reasoning-block summary:hover { color:var(--text); }
     .reasoning-text { margin-top:8px; color:var(--mute); white-space:pre-wrap; line-height:1.5; font-style:italic; }
 
-    .card { background:#1e1e2f; border:1px solid var(--border); border-radius:12px; padding:16px; margin:12px 0; }
+    .card { background:#1e1e2f; border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin:12px 0; }
+    .card p { margin:0 0 .5em; }
     .card-choice .opt, .card-choice .opt-disabled { display:block; padding:10px 14px; margin:6px 0; border:1px solid var(--border); border-radius:8px; font-size:14px; }
     .card-choice .opt { cursor:pointer; transition:all .2s; }
     .card-choice .opt:hover { background:rgba(102,126,234,.1); border-color:var(--accent); }
@@ -55,9 +56,10 @@
     .pfill { height:100%; background:linear-gradient(90deg,var(--accent),#7c3aed); border-radius:4px; transition:width .5s; }
     .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
     .card-input:focus { border-color:var(--accent); }
-    .slider-wrap { display:flex; align-items:center; gap:12px; margin-top:8px; }
-    .card-slider { flex:1; -webkit-appearance:none; height:6px; border-radius:3px; background:var(--bg3); outline:none; }
-    .card-slider::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; }
+    .slider-wrap { display:flex; align-items:center; gap:12px; margin-top:4px; }
+    .card-slider { flex:1; -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:var(--bg3); outline:none; margin:8px 0; }
+    .card-slider::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; margin-top:-7px; }
+    .card-slider::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; border:none; }
     .slider-val { min-width:32px; text-align:center; font-weight:600; color:var(--accent); font-size:15px; }
     .switch-wrap { display:inline-flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer; }
     .card-toggle { display:none; }
@@ -291,7 +293,7 @@
       msg.innerHTML = '<div class="avatar user">U</div><div class="bubble"></div>';
       msg.querySelector('.bubble').textContent = text;
       messagesEl.appendChild(msg);
-      chatHistory.push({ role: 'user', content: text });
+      // chatHistory 由 callAI 统一管理，避免重复 push
       scrollToBottom();
     }
 
@@ -310,25 +312,34 @@
     }
 
     function createChat(bubble) {
-      let cardCount = 0, textSeg = 0;
+      let cardCount = 0;
       currentChat = new XIUIChat({
         cards: cardDefs,
         autoFlush: 2000,
         onText: t => {
           if (!t) return;
-          // 卡片之后新建 text-block，确保文字排在对应卡片之后
-          if (textSeg < cardCount) {
-            textSeg = cardCount;
-            const tb = document.createElement('div');
-            tb.className = 'text-block';
-            const lastCard = bubble.querySelector('.card:last-of-type');
-            if (lastCard) lastCard.after(tb); else bubble.appendChild(tb);
-            tb.innerHTML = mkmd(t);
+          // 找到最后一张卡片后面的 text-block，没有则新建
+          const lastCard = bubble.querySelector('.card:last-of-type');
+          let tb, created = false;
+          if (lastCard) {
+            tb = lastCard.nextElementSibling;
+            if (!tb || !tb.classList.contains('text-block')) {
+              tb = document.createElement('div');
+              tb.className = 'text-block';
+              lastCard.after(tb);
+              created = true;
+            }
           } else {
-            let tb = bubble.querySelector('.text-block:last-of-type');
-            if (!tb) { tb = document.createElement('div'); tb.className = 'text-block'; bubble.appendChild(tb); }
-            tb.innerHTML = mkmd(t);
+            tb = bubble.querySelector('.text-block:last-of-type');
+            if (!tb) {
+              tb = document.createElement('div');
+              tb.className = 'text-block';
+              bubble.appendChild(tb);
+              created = true;
+            }
           }
+          console.log('[onText] created:', created, 'hasCard:', !!lastCard, 'len:', t.length, 'preview:', t.slice(0, 60));
+          tb.innerHTML = mkmd(t);
           scrollToBottom();
         },
         onCardBegin: () => {
