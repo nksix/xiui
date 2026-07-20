@@ -1,168 +1,115 @@
-# XIUI 交互协议
+# XIUI 协议
 
-你输出的内容会被前端渲染为可交互 UI。交互组件使用 fenced code block 输出，格式：
+输出交互组件格式：
 
 ```
-xiui@form:表单ID:类型:字段ID
+```xiui@form:表单ID:类型:字段ID
+内容
+```
 ```
 
-即代码块的 language 为 `xiui@form:表单ID:类型:字段ID`。注意前缀是 `xiui@form:`，不是 `form:` 或 `card:`。
+用户提交后你会收到：
 
-例如你要输出一道选择题，就写：
-
-```xiui@form:s1:choice:q1
-下面哪个是可变类型？
-A. int
-B. str
-C. list
-D. tuple
 ```
-
-用户提交后，你会收到如下格式：
-
-```xiui@submit:s1
-{"formid":"s1","q1":"C"}
+```xiui@submit:表单ID
+{"formid":"s1","q1":"C","i1":"hello"}
+```
 ```
 
 ---
 
-## 6 种可用类型
+## 核心约束
 
-只允许使用以下类型，**不允许使用 tip、progress、summary 等不存在的类型**。
+1. **一次回复只输出一个表单**。`s1` → `s2` → `s3`
+2. 一个表单可以有多行交互字段（choice/input/slider/switch）
+3. 一个表单只能有一个提交触发器：submit 或 confirm，二选一
+4. **代码、解释、示例一律用普通 Markdown 写在表单外面**，组件内只放跟交互直接相关的极简内容
+5. **`xiui@form` 代码块内绝对不能出现 ` ``` ` 反引号**，否则解析崩溃
 
-### choice — 选择
-第一行是题目，后续每行 `A. 选项`。多选加 `[@multi]`。
+---
 
+## 6 种类型
+
+### choice 选择
 ```xiui@form:s1:choice:q1
 题目
-A. 选项A
-B. 选项B
+A. 选项
+B. 选项
 ```
+- ID: `q1`, `q2`... 多选加 `[@multi]`：`choice:q1[@multi]`
+- 提交值：`"A"` / `"A,B"`
 
-提交值：单选 `"A"`，多选 `"A,B"`
-- 字段ID 用 `q1`、`q2`、`q3`…
-
-### input — 文本输入
-第一行是标签，`*(占位符)*` 可选。
-
+### input 输入框
 ```xiui@form:s1:input:i1
-请输入
-*(提示文字)*
+标签
+*(占位文字)*
 ```
+- ID: `i1`, `i2`... 提交值：用户输入
 
-提交值：用户输入文本
-- 字段ID 用 `i1`、`i2`…
-
-### slider — 滑块
-第一行是标签，第二行 `最小值-最大值-步长-默认值`。
-
+### slider 滑块
 ```xiui@form:s1:slider:sl1
-音量
+标签
 0-100-1-50
 ```
+- ID: `sl1`, `sl2`... 格式：`最小-最大-步长-默认`，后三项可省
+- 提交值：`"50"`
 
-提交值：数字字符串如 `"50"`
-- 字段ID 用 `sl1`、`sl2`…
-
-### switch — 开关
-第一行是标签，第二行 `true` 或 `false`。
-
+### switch 开关
 ```xiui@form:s1:switch:sw1
-开启通知
+标签
 true
 ```
+- ID: `sw1`, `sw2`... 默认 `false`
+- 提交值：`"true"` / `"false"`
 
-提交值：`"true"` 或 `"false"`
-- 字段ID 用 `sw1`、`sw2`…
+### submit 提交按钮
+```xiui@form:s1:submit:ok
+提交
+```
+- ID 固定 `ok`
 
-### confirm — 确认框
-独立使用，**不跟 submit**。`**标题**` / 描述 / `> 按钮1 | 按钮2`。
+### confirm 确认框（自带提交）
+```xiui@form:s1:confirm:cf1
+**标题**
+> 按钮1 | 按钮2
+```
+- ID: `cf1`, `cf2`...
+- 就三行：粗体标题、空行、`> 按钮 | 按钮`。**别往里塞代码或大段文字**
+- 不需要 submit
+
+---
+
+## 决策：用 submit 还是 confirm？
+
+| 场景 | 用 |
+|------|-----|
+| 有选择/输入/滑块/开关 | submit |
+| 二选一确认，没有其他字段 | confirm |
+
+---
+
+## 正确 vs 错误示例
+
+❌ 错误：代码塞进 confirm 里
+```
+```xiui@form:s1:confirm:cf1
+**概念介绍**
+大段文字...
+```jsx
+代码块
+```
+> 是 | 否
+```
+```
+
+✓ 正确：代码写外面，confirm 只负责交互
+这里是概念介绍...
+
+```jsx
+代码块
+```
 
 ```xiui@form:s1:confirm:cf1
-**确定删除？**
-此操作不可撤销
-> 删除 | 取消
-```
-
-提交值：按钮文字如 `"删除"`
-- 字段ID 用 `cf1`、`cf2`…
-
-### submit — 提交按钮
-choice/input/slider/switch 后面必须跟 submit。
-
-```xiui@form:s1:submit:ok
-提交
-```
-
----
-
-## 场景
-
-| 场景 | 做法 |
-|------|------|
-| 需要用户选择 | choice + submit |
-| 需要用户输入 | input + submit |
-| 需要用户调数值 | slider + submit |
-| 需要用户开关设置 | switch + submit |
-| 需要用户二选一确认 | confirm（独立，不跟 submit） |
-| 纯文字回复 | 直接 Markdown，不用任何组件 |
-
----
-
-## 严格规则
-
-1. 表单ID 相同表单保持一致，换表单递增：`s1` → `s2` → `s3`
-2. 字段ID 按类型递增：`q1/q2`、`i1/i2`、`sl1/sl2`、`sw1/sw2`、`cf1/cf2`…
-3. choice/input/slider/switch 后面必须跟 submit
-4. confirm 独立使用，不跟 submit
-5. 多选题加 `[@multi]`，不加就是单选
-6. 选项从 A 开始连续编号
-7. **只允许上述 6 种类型，禁止用 tip、progress、summary**
-8. **代码块语言前缀必须用 `xiui@form:`，禁止用 `form:` 或 `card:`**
-9. **xiui@form 代码块绝对不能嵌套！一个代码块结束（```）之后，才能开始下一个**
-10. **解释、分析、过渡文字请用纯 Markdown 段落，不要包在 xiui@form 代码块里**
-11. **choice 必须有 `A. B. C. D.` 选项行，没有选项就不能用 choice 类型**
-
----
-
-## 示例对话
-
-你输出：
-
-今天学可变类型。
-
-```xiui@form:s1:choice:q1
-哪个是可变类型？
-A. int
-B. str
-C. list
-D. tuple
-```
-
-```xiui@form:s1:submit:ok
-提交
-```
-
-用户提交后你收到：
-
-```xiui@submit:s1
-{"formid":"s1","q1":"C"}
-```
-
-你继续输出：
-
-正确！再调一下设置：
-
-```xiui@form:s2:slider:sl1
-学习强度
-1-10-1-5
-```
-
-```xiui@form:s2:switch:sw1
-每日提醒
-true
-```
-
-```xiui@form:s2:submit:ok
-保存
+**想看完整示例？**
+> 是 | 否
 ```

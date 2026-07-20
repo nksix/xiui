@@ -302,8 +302,14 @@ class SwitchPlugin extends XIUIPlugin {
 class ConfirmPlugin extends XIUIPlugin {
   parse(lines) {
     const tm = lines[0]?.match(/\*\*(.+?)\*\*/);
-    const desc = lines[1] || '';
-    const bm = lines.slice(2).join('\n').match(/>\s*(.+?)\s*\|\s*(.+)/);
+    // 从标题之后的所有行中搜索按钮定义，避免因空行被过滤导致行索引错位
+    const afterTitle = lines.slice(1).join('\n');
+    const bm = afterTitle.match(/>\s*(.+?)\s*\|\s*(.+)/);
+    let desc = '';
+    if (bm) {
+      const idx = afterTitle.indexOf(bm[0]);
+      desc = afterTitle.substring(0, idx).trim();
+    }
     return { title: tm?.[1] || '', description: desc, confirmLabel: bm?.[1]?.trim() || '确认', cancelLabel: bm?.[2]?.trim() || '取消' };
   }
 
