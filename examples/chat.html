@@ -174,7 +174,9 @@
       lastAssistantIdx = -1;
       for (const msg of data.history) {
         if (msg.role === 'user') {
-          addUserMsg(msg.content);
+          // 隐藏操作消息（xiui@submit/confirm）不渲染到 UI，但保留在 chatHistory 中
+          const isHidden = /xiui@(?:submit|confirm):/.test(msg.content);
+          if (!isHidden) addUserMsg(msg.content);
           chatHistory.push(msg);
         } else {
           chatHistory.push(msg);
