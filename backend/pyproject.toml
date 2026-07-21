@@ -1,7 +1,7 @@
 [project]
 name = "xiui-agent"
 version = "0.1.0"
-description = "XIUI Agent Backend — AI 智能体服务端"
+description = "XIUI Agent Backend — 自适应学习智能体"
 readme = "../README.md"
 license = { text = "MIT" }
 authors = [
@@ -9,8 +9,15 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
     "openai>=1.0.0",
     "httpx>=0.27.0",
+    "sse-starlette>=2.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.scripts]
