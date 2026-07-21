@@ -1,7 +1,6 @@
 """FastAPI 服务端 — 静态文件 + /api/chat 流式接口."""
 
 import json
-import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -21,7 +20,6 @@ app = FastAPI(title="XIUI Agent", description="自适应学习智能体后端")
 
 
 # ── 静态文件 ──────────────────────────────────────────────────
-# npm 包映射（markdown-it, katex, highlight.js）
 NODE_MODULES = FRONTEND_DIR / "node_modules"
 if NODE_MODULES.exists():
     app.mount("/npm", StaticFiles(directory=str(NODE_MODULES)), name="npm")
@@ -70,50 +68,25 @@ async def chat(request: Request):
     elif isinstance(history, list):
         parsed_history = history
 
-    PHASE_LABELS = {
-        "goal_setting": "正在设定学习目标...",
-        "diagnose": "正在诊断知识水平...",
-        "teach": "正在针对性教学...",
-        "practice": "正在出靶向练习题...",
-        "evaluate": "正在评估掌握情况...",
-    }
-
-    PHASE_REASONING = {
-        "goal_setting": "先了解学生想学什么，确定学习范围和目标。",
-        "diagnose": "通过诊断题测试学生当前水平，找出薄弱点和误区。",
-        "teach": "针对诊断出的薄弱点进行讲解，建立正确认知。",
-        "practice": "出靶向练习题，刻意练习薄弱点，根据表现决定推进还是回退。",
-        "evaluate": "总结掌握情况，根据评估结果决定继续新知识点还是复习。",
-    }
-
     async def event_stream():
         try:
-            phase = "goal_setting"
-            thinking_sent = False
-
-            # 发送阶段状态
-            yield f"data: {json.dumps({'status': 'thinking', 'message': PHASE_LABELS.get(phase, '思考中...')})}\n\n"
+            # 发送初始状态
+            yield f"data: {json.dumps({'status': 'thinking', 'message': '正在思考...'})}\n\n"
 
             # 构建消息
             user_message = message + "\n\n严格遵循 XIUI 协议 回复"
             messages = parsed_history + [{"role": "user", "content": user_message}]
 
-            async for chunk in stream_agent(messages, phase):
-                if isinstance(chunk, dict) and "phase" in chunk:
-                    # 阶段更新
-                    new_phase = chunk["phase"]
-                    if new_phase != phase:
-                        phase = new_phase
-                        yield f"data: {json.dumps({'status': 'thinking', 'message': PHASE_LABELS.get(phase, '思考中...')})}\n\n"
+            async for chunk in stream_agent(messages):
+                if isinstance(chunk, dict) and "tool" in chunk:
+                    # 工具调用 → 显示在思考面板
+                    label = chunk["label"]
+                    yield "data: " + json.dumps({"reasoning_content": "🔧 " + label}) + "\n\n"
                 else:
-                    if not thinking_sent:
-                        # 把思考过程作为对话内容输出，保证用户能看到
-                        thinking_sent = True
-                        thinking_text = PHASE_REASONING.get(phase, '分析中...')
-                        yield f"data: {json.dumps({'content': f'*🤔 {thinking_text}*'})}\n\n"
+                    # 文本内容
                     yield f"data: {json.dumps({'content': chunk})}\n\n"
 
-            yield f"data: {json.dumps({'done': True, 'phase': phase})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 

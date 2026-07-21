@@ -1,20 +1,26 @@
-"""LangGraph 自适应学习 Agent."""
+"""ReAct Agent — 自适应学习智能体，使用文件工具持久化学生状态."""
 
-import json
 import os
 from pathlib import Path
-from typing import TypedDict, Annotated
+from typing import AsyncIterator
 
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 
+from .tools import (
+    get_student_state,
+    update_student_state,
+    start_topic,
+    record_diagnose,
+    update_weak_points,
+    record_practice,
+    mark_topic_complete,
+)
 
-# ── LLM 工厂 ─────────────────────────────────────────────────
+# ── LLM ───────────────────────────────────────────────────────
 def _create_llm(streaming: bool = False) -> ChatOpenAI:
-    """从环境变量创建 LLM 实例."""
     return ChatOpenAI(
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         temperature=0.7,
@@ -27,245 +33,131 @@ def _create_llm(streaming: bool = False) -> ChatOpenAI:
 _PROMPT_PATH = Path(__file__).parent.parent.parent.parent / "spec" / "prompt.md"
 _XIUI_PROTOCOL = _PROMPT_PATH.read_text(encoding="utf-8")
 
-_TEACHING_FLOW = """
-你是专业的一对一自适应学习辅导老师，遵循五阶段自适应教学引擎。
+_SYSTEM_PROMPT = f"""{_XIUI_PROTOCOL}
 
-**你既是老师，也是引擎。你自己控制阶段流转，不要等用户说'下一步'。**
+---
 
-## 五阶段流程
+你是专业的一对一自适应学习辅导老师。你拥有文件工具来记录和读取学生的学习状态。
 
-| 阶段 | 做什么 | 怎么输出XIUI |
-|------|--------|-------------|
-| **1. 设定目标** | 确定学什么、到什么程度。先问学生想学什么，给出学习目标建议 | choice 让用户选择学习范围 + submit |
-| **2. 诊断** | 测当前水平，找薄弱点和误区。出 1-2 道诊断题 | choice 选择题 + submit |
-| **3. 教学** | 针对诊断出的薄弱点讲解，建立正确认知。讲完一个概念后用 confirm 确认理解 | confirm 确认理解 |
-| **4. 靶向练习** | 针对薄弱点出题，刻意练习。难度略高于诊断。答对继续，答错回到教学 | choice/input 练习题 + submit |
-| **5. 评估** | 测掌握度变化，决定下一步 | confirm 确认是否继续 |
+## 核心教学原则
 
-## 自适应逻辑（你必须自主执行）
+1. **先了解再教学**：第一次对话先问学生想学什么，用 start_topic 记录知识点和目标。
+2. **诊断先行**：开始新知识点时，用 get_student_state 检查状态。如果该知识点没有诊断记录，先出诊断题。
+3. **靶向教学**：根据诊断结果（薄弱点），针对性讲解。讲完用 confirm 确认理解。
+4. **刻意练习**：出练习题巩固，用 record_practice 记录对错。连续答对推进，答错回到教学。
+5. **闭环评估**：知识点掌握后用 mark_topic_complete 标记完成，用 confirm 询问继续还是学新知识点。
 
-- **诊断 → 教学**：根据诊断答错的知识点，决定教学内容和难度。答对的跳过不教
-- **练习 → 教学/评估**：练习连续答对 → 推进到评估；答错 → 回到教学，换个角度再讲
-- **评估 → 诊断/完成**：评估通过 → 回到诊断开始新知识点；未通过 → 回到教学重点补习
+## 工具使用指南
 
-## 阶段流转规则
+- **对话开始时**先调用 `get_student_state()` 了解当前状态
+- 确定学习目标后调用 `start_topic(topic, goal)` 创建知识点记录
+- 每次诊断后调用 `record_diagnose(topic, result)` 和 `update_weak_points(topic, points)`
+- 每次练习后调用 `record_practice(topic, correct, note)`
+- 完成知识点后调用 `mark_topic_complete(topic, summary)`
 
-收到用户 XIUI 提交后，**自动推进阶段**：
-- 目标设定提交 → 进入诊断
-- 诊断提交 → 进入教学
-- 教学 confirm"懂了" → 进入靶向练习；confirm"没懂" → 继续教学
-- 靶向练习提交且答对 → 继续练习或推进评估；答错 → 回到教学
-- 评估 confirm"继续" → 进入新知识点的诊断；confirm"复习" → 回到教学
+## 对话风格
 
-**不要输出"让我们进入XX阶段"这种话，直接在该阶段的行为中体现即可。**
+- 你是老师，主动引导学生，不要等学生说「下一步」
+- 讲解清晰易懂，适当举例
+- XIUI 组件和普通 Markdown 配合使用，讲解在外面，交互在里面
+- 有 choice/input/slider/switch 时加 submit；纯二选一确认用 confirm
+
+## XIUI 格式提醒
+
+choice + submit 是两个独立的代码块，不是合在一起的：
+```xiui@form:s1:choice:q1
+题目
+A. ...
+B. ...
+```
+```xiui@form:s1:submit:ok
+提交
+```
+
+confirm 自带提交，不需要 submit：
+```xiui@form:s1:confirm:cf1
+**标题**
+
+> 按钮1 | 按钮2
+```
 """
 
-XIUI_SYSTEM_PROMPT = _XIUI_PROTOCOL + "\n\n" + _TEACHING_FLOW
+
+# ── 工具列表 ───────────────────────────────────────────────────
+TOOLS = [
+    get_student_state,
+    update_student_state,
+    start_topic,
+    record_diagnose,
+    update_weak_points,
+    record_practice,
+    mark_topic_complete,
+]
 
 
-# ── State ─────────────────────────────────────────────────────
-class TutorState(TypedDict):
-    messages: Annotated[list[BaseMessage], add_messages]
-    phase: str  # goal_setting | diagnose | teach | practice | evaluate
+# ── 工具名称 → 中文描述 ────────────────────────────────────────
+TOOL_LABELS = {
+    "get_student_state": "正在查询学习进度...",
+    "update_student_state": "正在更新学生信息...",
+    "start_topic": "正在创建学习知识点...",
+    "record_diagnose": "正在记录诊断结果...",
+    "update_weak_points": "正在更新薄弱点...",
+    "record_practice": "正在记录练习结果...",
+    "mark_topic_complete": "正在标记知识点完成...",
+}
 
 
-PHASES = ["goal_setting", "diagnose", "teach", "practice", "evaluate"]
-
-
-def _next_phase(current: str) -> str:
-    idx = PHASES.index(current)
-    return PHASES[(idx + 1) % len(PHASES)]
-
-
-# ── Agent Node ────────────────────────────────────────────────
-def _build_messages(state: TutorState) -> list[BaseMessage]:
-    """将 state 转换为 LLM 消息列表，加入阶段提示."""
-    phase = state.get("phase", "goal_setting")
-    messages: list[BaseMessage] = [SystemMessage(content=XIUI_SYSTEM_PROMPT)]
-
-    phase_hints = {
-        "goal_setting": '\n\n【当前阶段：设定目标】先问学生想学什么，给出学习范围选项让学生选择。用 choice + submit。',
-        "diagnose": '\n\n【当前阶段：诊断】出一道诊断选择题，测试学生的当前水平。用 choice + submit。一次 1-2 题。',
-        "teach": '\n\n【当前阶段：教学】针对诊断中的薄弱点进行讲解。讲完后用 confirm 确认学生是否理解。不要出题，只讲概念。',
-        "practice": '\n\n【当前阶段：靶向练习】出练习题，难度略高于诊断题。答对了简短表扬后继续出题，连续答对 2 题后推进到评估。答错了回到教学。用 choice/input + submit。',
-        "evaluate": '\n\n【当前阶段：评估】总结学生掌握情况，用 confirm 询问"继续学习新知识点"还是"再复习一遍"。',
-    }
-    messages.append(SystemMessage(content=phase_hints.get(phase, "")))
-
-    # 保留最近 20 条消息避免上下文过长
-    history = state.get("messages", [])[-20:]
-    for m in history:
-        if isinstance(m, SystemMessage):
-            continue
-        messages.append(m)
-
-    return messages
-
-
-def _detect_phase_from_messages(state: TutorState) -> str:
-    """根据最近的消息内容推断下一阶段."""
-    messages = state.get("messages", [])
-    phase = state.get("phase", "goal_setting")
-
-    # 查找最近的用户提交
-    has_submit = False
-    last_user_data: dict[str, str] = {}
-    last_ai = ""
-
-    for m in reversed(messages):
-        content = m.content if hasattr(m, "content") else str(m)
-        if isinstance(m, HumanMessage) and "xiui@submit" in content:
-            has_submit = True
-            try:
-                json_start = content.index("{")
-                json_end = content.rindex("}") + 1
-                last_user_data = json.loads(content[json_start:json_end])
-            except (ValueError, json.JSONDecodeError):
-                pass
-            break
-        if isinstance(m, AIMessage) and not last_ai:
-            last_ai = content[:500] if content else ""
-
-    if not has_submit:
-        return phase
-
-    # 五阶段流转逻辑
-    if phase == "goal_setting":
-        return "diagnose"
-
-    if phase == "diagnose":
-        return "teach"
-
-    if phase == "teach":
-        # confirm 提交的数据中 cf* 字段表示用户的选择
-        for k, v in last_user_data.items():
-            if k.startswith("cf"):
-                if "懂" in str(v) or "是" in str(v) or "会" in str(v):
-                    return "practice"
-                return "teach"  # 没懂，继续教
-        # 没有 confirm 数据，默认推进到练习
-        return "practice"
-
-    if phase == "practice":
-        # 检查是否提到了评估/总结
-        if "评估" in last_ai or "总结" in last_ai or "掌握" in last_ai:
-            return "evaluate"
-        # 检查提交的答案是否正确（通过 AI 上一轮的暗示）
-        if "对" in last_ai or "正确" in last_ai or "很好" in last_ai:
-            return "evaluate"
-        return "teach"  # 答错，回到教学
-
-    if phase == "evaluate":
-        for k, v in last_user_data.items():
-            if k.startswith("cf"):
-                if "继续" in str(v) or "新" in str(v):
-                    return "diagnose"  # 进入新知识点
-                return "teach"  # 复习
-        return "diagnose"
-
-    return phase
-
-
-def agent_node(state: TutorState) -> dict:
-    """核心 Agent 节点：调用 LLM 生成响应."""
-    llm = _create_llm(streaming=False)
-    messages = _build_messages(state)
-    response = llm.invoke(messages)
-
-    # 自动检测下一阶段
-    next_phase = _detect_phase_from_messages(state)
-
-    return {
-        "messages": [response],
-        "phase": next_phase,
-    }
-
-
-# ── Graph 构建 ────────────────────────────────────────────────
-def build_graph() -> StateGraph:
-    """构建自适应学习 Agent 图."""
-    builder = StateGraph(TutorState)
-
-    builder.add_node("agent", agent_node)
-
-    builder.add_edge(START, "agent")
-    builder.add_edge("agent", END)
-
-    return builder.compile(checkpointer=MemorySaver())
-
-
-def create_agent():
-    """创建 Agent 实例."""
-    return build_graph()
-
-
-# ── 便捷调用 ──────────────────────────────────────────────────
-async def run_agent(messages: list[dict], phase: str = "goal_setting") -> dict:
-    """运行 Agent，返回 AI 响应和更新后的阶段."""
-    graph = build_graph()
-
-    # 转换消息格式
-    converted = []
-    for m in messages:
-        role = m.get("role", "user")
-        content = m.get("content", "")
-        if role == "user":
-            converted.append(HumanMessage(content=content))
-        elif role == "assistant":
-            converted.append(AIMessage(content=content))
-        elif role == "system":
-            converted.append(SystemMessage(content=content))
-
-    config = {"configurable": {"thread_id": "default"}}
-    result = await graph.ainvoke(
-        {"messages": converted, "phase": phase},
-        config=config,
+# ── Agent 创建 ─────────────────────────────────────────────────
+def create_agent(streaming: bool = False):
+    """创建 ReAct agent 实例."""
+    llm = _create_llm(streaming=streaming)
+    return create_react_agent(
+        model=llm,
+        tools=TOOLS,
+        checkpointer=MemorySaver(),
+        prompt=_SYSTEM_PROMPT,
     )
 
-    last_msg = result["messages"][-1]
-    return {
-        "content": last_msg.content,
-        "phase": result["phase"],
-    }
 
+# ── 流式调用 ───────────────────────────────────────────────────
+async def stream_agent(messages: list[dict]) -> AsyncIterator:
+    """流式运行 ReAct agent，逐块 yield 文本或工具调用信息."""
+    agent = create_agent(streaming=True)
 
-async def stream_agent(messages: list[dict], phase: str = "goal_setting"):
-    """流式运行 Agent，逐块 yield 内容."""
-    llm = _create_llm(streaming=True)
-
-    # 构建消息
-    phase_hints = {
-        "goal_setting": "【当前阶段：设定目标】先问学生想学什么，用 choice + submit。",
-        "diagnose": "【当前阶段：诊断】出一道诊断选择题测试水平，用 choice + submit。",
-        "teach": "【当前阶段：教学】针对薄弱点讲解，讲完用 confirm 确认理解。不要出题。",
-        "practice": "【当前阶段：靶向练习】出练习题，答对推进、答错回教学。用 choice/input + submit。",
-        "evaluate": "【当前阶段：评估】总结掌握情况，用 confirm 询问继续还是复习。",
-    }
-
-    llm_messages: list[BaseMessage] = [
-        SystemMessage(content=XIUI_SYSTEM_PROMPT),
-        SystemMessage(content=phase_hints.get(phase, "")),
-    ]
+    lc_messages: list[BaseMessage] = []
     for m in messages[-20:]:
         role = m.get("role", "user")
         content = m.get("content", "")
         if role == "user":
-            llm_messages.append(HumanMessage(content=content))
+            lc_messages.append(HumanMessage(content=content))
         elif role == "assistant":
-            llm_messages.append(AIMessage(content=content))
+            lc_messages.append(AIMessage(content=content))
 
-    # 流式调用
-    chunks = []
-    async for chunk in llm.astream(llm_messages):
-        text = chunk.content if hasattr(chunk, "content") else ""
-        if text:
-            chunks.append(text)
-            yield text
+    config = {"configurable": {"thread_id": "default"}}
 
-    # 推断下一阶段
-    full = "".join(chunks)
-    phase = _detect_phase_from_messages({
-        "messages": [AIMessage(content=full)],
-        "phase": phase,
-    })
-    yield {"phase": phase}
+    seen_tools: set[str] = set()
+
+    async for event in agent.astream(
+        {"messages": lc_messages},
+        config=config,
+        stream_mode="messages",
+    ):
+        if isinstance(event, tuple):
+            chunk, meta = event
+
+            # 检测工具调用
+            tool_calls = getattr(chunk, "tool_calls", None)
+            if tool_calls:
+                for tc in tool_calls:
+                    name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    if name and name not in seen_tools:
+                        seen_tools.add(name)
+                        yield {"tool": name, "label": TOOL_LABELS.get(name, f"正在执行 {name}...")}
+
+            # 输出文本内容（跳过工具调用块和工具回复块）
+            content = getattr(chunk, "content", "")
+            if content and isinstance(content, str) and not tool_calls:
+                # 跳过 ToolMessage 的回显
+                msg_type = getattr(chunk, "type", "")
+                if msg_type != "tool":
+                    yield content
