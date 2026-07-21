@@ -155,11 +155,17 @@ export class XIUIPlugin {
 
 class ChoicePlugin extends XIUIPlugin {
   parse(lines) {
-    const question = lines[0] || '';
+    let question = '';
     const options = [];
     const seenIds = new Set();
-    for (let i = 1; i < lines.length; i++) {
-      const m = lines[i].match(/^-?\s*([A-D])\.\s*(.+)$/);
+    const optionRE = /^-?\s*([A-D])\.\s*(.+)$/;
+    let startIdx = 0;
+    if (lines.length > 0 && !optionRE.test(lines[0])) {
+      question = lines[0];
+      startIdx = 1;
+    }
+    for (let i = startIdx; i < lines.length; i++) {
+      const m = lines[i].match(optionRE);
       if (m && !seenIds.has(m[1])) {
         options.push({ id: m[1], label: m[2] });
         seenIds.add(m[1]);
@@ -174,7 +180,6 @@ class ChoicePlugin extends XIUIPlugin {
   render() {
     const d = this.data;
     if (!d.options || d.options.length === 0) {
-      // 无选项：降级为纯文本渲染（AI 可能误用了 choice 类型）
       return this.md.render(d._text || d.question || '');
     }
     const selected = this._isMulti
@@ -184,7 +189,7 @@ class ChoicePlugin extends XIUIPlugin {
     return (d.question ? this.md.render(d.question) : '')
       + (d.options || []).map(o => {
           const sel = selected.includes(o.id) ? ' sel' : '';
-          return `<span class="opt${sel}" data-id="${o.id}">${this.html(o.label)}</span>`;
+          return `<span class="opt${sel}" data-id="${o.id}"><b>${o.id}.</b> ${this.html(o.label)}</span>`;
         }).join('');
   }
 
@@ -465,6 +470,15 @@ export class XIUIChat {
   // ─── 内部：plugin 状态变化回调 ──────────────────────
 
   _onPluginChange(plugin, oldVal, newVal) {
+    // 用户纠正了之前标记为 invalid 的字段 → 清除其错误状态
+    if (plugin.el && plugin.el.classList.contains('x-card-invalid')) {
+      plugin.el.classList.remove('x-card-invalid');
+      // 如果所有 invalid 都已清除，收起错误提示
+      if (this._bubble && !this._bubble.querySelector('.x-card-invalid')) {
+        const msg = this._bubble.querySelector('.x-valid-msg');
+        if (msg) msg.remove();
+      }
+    }
     // 子类可重写，或通过 onEvent 配置项监听
     if (this._onEvent) {
       this._onEvent(plugin, 'change', { oldVal, newVal });
@@ -481,10 +495,13 @@ export class XIUIChat {
 .x-msg{display:flex;gap:12px;margin-bottom:16px;animation:x-fade-in .3s ease}
 @keyframes x-fade-in{from{opacity:0;transform:translateY(5px)}}
 .x-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;background:linear-gradient(135deg,var(--xi-accent,#667eea),var(--xi-accent2,#7c3aed));color:#fff}
-.x-bubble{max-width:70%;min-width:0;padding:12px 16px;background:var(--xi-bg2,#1a1a2e);border-radius:0 16px 16px 16px;line-height:1.6;font-size:15px;color:var(--xi-text,#e4e4e7)}
+.x-bubble{width:680px;max-width:100%;min-width:0;padding:20px 24px;background:var(--xi-bg2,#1a1a2e);border-radius:0 16px 16px 16px;line-height:1.6;font-size:15px;color:var(--xi-text,#e4e4e7)}
 .x-bubble p{margin:0 0 8px;font-size:inherit}.x-bubble p:last-child{margin:0}
-.x-bubble pre{background:var(--xi-bg,#0f0f23);border-radius:8px;padding:12px;overflow-x:auto}
-.x-bubble code{font-size:13px}
+.x-bubble pre{background:var(--xi-bg,#0f0f23);border-radius:8px;padding:12px;overflow-x:auto;margin:12px 0}
+.x-bubble pre code{font-size:13px;background:none;padding:0}
+.x-bubble code{font-size:13px;background:var(--xi-bg,#0f0f23);padding:2px 6px;border-radius:4px}
+.x-bubble .katex{font-size:1.1em}
+.x-bubble .katex-display{overflow-x:auto;overflow-y:hidden;margin:12px 0}
 .x-bubble h1,.x-bubble h2,.x-bubble h3,.x-bubble h4{margin:12px 0 8px;font-weight:600}
 .x-bubble h1{font-size:1.4em}.x-bubble h2{font-size:1.2em}.x-bubble h3{font-size:1.1em}
 .x-bubble ul,.x-bubble ol{padding-left:20px;margin:8px 0}
@@ -500,11 +517,37 @@ export class XIUIChat {
 .x-sk-line{height:12px;background:var(--xi-border,#27272a);border-radius:4px}
 .x-pv{padding:12px 16px;margin:12px 0;border:1px dashed var(--xi-border,#27272a);border-radius:12px;line-height:1.6;font-size:14px}
 .x-card{background:var(--xi-card-bg,#1e1e2f);border:1px solid var(--xi-border,#27272a);border-radius:12px;padding:16px 20px;margin:12px 0}
-.x-card-invalid{border-color:#ef4444}
+.x-card-invalid{border-color:#ef4444;animation:x-shake .4s ease}
+.x-card-invalid .card-input{border-color:#ef4444}
+@keyframes x-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.x-valid-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#ef4444;font-size:14px;line-height:1.5}
+.x-valid-msg b{color:#fff}
 .x-card-disabled{opacity:.5;pointer-events:none;filter:grayscale(.3)}
 .x-tag-done{display:inline-block;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
 .x-tag-done.ok{background:rgba(34,197,94,.12);color:#22c55e}
 .x-tag-done.cancelled{background:rgba(239,68,68,.1);color:#ef4444}
+/* ── 组件样式 ── */
+.card-choice .opt,.card-choice .opt-disabled{display:block;padding:10px 14px;margin:6px 0;border:1px solid var(--xi-border,#27272a);border-radius:8px;font-size:14px}
+.card-choice .opt{cursor:pointer;transition:all .2s}
+.card-choice .opt:hover{background:rgba(102,126,234,.1);border-color:var(--xi-accent,#667eea)}
+.card-choice .opt.sel{background:rgba(102,126,234,.15);border-color:var(--xi-accent,#667eea)}
+.card-input{width:100%;padding:12px 16px;border:1px solid var(--xi-border,#27272a);border-radius:12px;background:var(--xi-bg,#0f0f23);color:var(--xi-text,#e4e4e7);font-size:15px;outline:none;box-sizing:border-box}
+.card-input:focus{border-color:var(--xi-accent,#667eea)}
+.slider-wrap{display:flex;align-items:center;gap:12px;margin-top:4px}
+.card-slider{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:var(--xi-bg,#0f0f23);outline:none;margin:8px 0}
+.card-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--xi-accent,#667eea);cursor:pointer;margin-top:-7px}
+.card-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--xi-accent,#667eea);cursor:pointer;border:none}
+.slider-val{min-width:32px;text-align:center;font-weight:600;color:var(--xi-accent,#667eea);font-size:15px}
+.switch-wrap{display:inline-flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer}
+.card-toggle{display:none}
+.switch-track{width:44px;height:24px;border-radius:12px;background:var(--xi-border,#27272a);position:relative;transition:background .2s}
+.switch-track::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+.card-toggle:checked+.switch-track{background:var(--xi-accent,#667eea)}
+.card-toggle:checked+.switch-track::after{transform:translateX(20px)}
+.bts{display:flex;gap:12px;margin-top:16px}
+.btn-pri{flex:1;padding:12px 24px;background:var(--xi-accent,#667eea);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px}
+.btn-ghost{flex:1;padding:12px 24px;background:var(--xi-bg,#0f0f23);color:var(--xi-mute,#a1a1aa);border:1px solid var(--xi-border,#27272a);border-radius:10px;cursor:pointer;font-size:15px}
+.btn-submit{background:var(--xi-accent,#667eea);color:#fff;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:15px;margin:12px 0}
 `.trim();
     document.head.appendChild(style);
   }
@@ -773,21 +816,54 @@ export class XIUIChat {
       if (formId && card.formId !== formId) continue;
       if (!requiredTypes.includes(card.type)) continue;
       if (!card.plugin.validate()) {
-        missing.push(card.typeId);
+        // 提取字段标签，用于友好提示
+        const label = this._cardLabel(card);
+        missing.push({ typeId: card.typeId, label });
       }
     }
     return { valid: missing.length === 0, missing };
   }
 
+  /** 提取卡片的人类可读标签 */
+  _cardLabel(card) {
+    const d = card.data || {};
+    const labelMap = { choice: d.question, input: d.title, slider: d.title, switch: d.title, confirm: d.title };
+    return (labelMap[card.type] || card.typeId || '未命名字段').replace(/[*#_`~]/g, '').trim();
+  }
+
+  /** 清除表单级的验证错误提示 */
+  _clearValidMsg() {
+    if (!this._bubble) return;
+    const old = this._bubble.querySelector('.x-valid-msg');
+    if (old) old.remove();
+    this._bubble.querySelectorAll('.x-card-invalid').forEach(el => el.classList.remove('x-card-invalid'));
+  }
+
   submit(formId) {
     if (this._submitted) return { success: false, error: 'already submitted' };
+    this._clearValidMsg();
     const { valid, missing } = this.validate(formId);
     if (!valid) {
       if (this._bubble) {
-        this._bubble.querySelectorAll('.x-card-invalid').forEach(x => x.classList.remove('x-card-invalid'));
-        missing.forEach(id => {
-          const el = this._bubble.querySelector(`[data-typeid="${id}"]`);
-          if (el) el.classList.add('x-card-invalid');
+        // 显示友好的错误提示
+        const names = missing.map(m => `<b>「${m.label}」</b>`).join('、');
+        const msg = document.createElement('div');
+        msg.className = 'x-valid-msg';
+        msg.innerHTML = `请完成以下字段：${names}`;
+        // 插入到 bubble 顶部（第一个 x-card 之前）
+        const firstCard = this._bubble.querySelector('.x-card');
+        if (firstCard) {
+          this._bubble.insertBefore(msg, firstCard);
+        } else {
+          this._bubble.appendChild(msg);
+        }
+        // 高亮缺失字段 + 滚动到第一个
+        missing.forEach((m, i) => {
+          const el = this._bubble.querySelector(`[data-typeid="${m.typeId}"]`);
+          if (el) {
+            el.classList.add('x-card-invalid');
+            if (i === 0) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
         });
       }
       return { success: false, error: 'incomplete', missing };

@@ -17,13 +17,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('.', { maxAge: 0, etag: false }));
+app.use('/npm', express.static(join(__dirname, 'node_modules')));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
 });
 
-const systemPrompt = readFileSync(join(__dirname, 'spec', 'prompt.md'), 'utf-8');
+const systemPrompt = "你是一个专业的一对一辅导老师，遵循 诊断 -> 评估 ->辅导 -> 提升 的教学流程\n" + readFileSync(join(__dirname, 'spec', 'prompt.md'), 'utf-8');
 
 // ---- 日志 ----
 const LOG_DIR = join(__dirname, 'logs');

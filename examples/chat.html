@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>XIUI Chat Demo</title>
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js?ts=20260718"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="/npm/markdown-it/dist/markdown-it.min.js?v=2"></script>
+  <link rel="stylesheet" href="/npm/katex/dist/katex.min.css">
+  <script src="/npm/katex/dist/katex.min.js?v=2"></script>
+  <link rel="stylesheet" href="/npm/highlight.js/styles/github-dark.min.css">
+  <script type="module" src="/lib/hljs-bundle.js?v=3"></script>
   <style>
     :root { --bg:#0f0f23; --bg2:#1a1a2e; --bg3:#16213e; --text:#e4e4e7; --mute:#a1a1aa; --accent:#667eea; --border:#27272a;
             --xi-bg:#0f0f23; --xi-bg2:#1a1a2e; --xi-text:#e4e4e7; --xi-border:#27272a; --xi-accent:#667eea; --xi-accent2:#7c3aed; --xi-card-bg:#1e1e2f; }
@@ -26,8 +28,11 @@
     .bubble { max-width:70%; min-width:0; padding:12px 16px; background:var(--bg2); border-radius:0 16px 16px 16px; line-height:1.6; font-size:15px; }
     .msg.user .bubble { max-width:80%; }
     .bubble p { margin:0 0 8px; font-size:inherit; } .bubble p:last-child { margin:0; }
-    .bubble pre { background:var(--bg); border-radius:8px; padding:12px; overflow-x:auto; }
-    .bubble code { font-size:13px; }
+    .bubble pre { background:var(--bg); border-radius:8px; padding:12px; overflow-x:auto; margin:12px 0; }
+    .bubble pre code { font-size:13px; background:none; padding:0; }
+    .bubble code { font-size:13px; background:var(--bg); padding:2px 6px; border-radius:4px; }
+    .bubble .katex { font-size:1.1em; }
+    .bubble .katex-display { overflow-x:auto; overflow-y:hidden; margin:12px 0; }
     .bubble table { border-collapse:collapse; width:100%; margin:12px 0; }
     .bubble th { background:var(--bg3); font-weight:600; }
     .bubble th,.bubble td { padding:8px 12px; border:1px solid var(--border); text-align:left; }
@@ -126,7 +131,49 @@
     const sendBtn = document.getElementById('sendBtn');
     const statusEl = document.getElementById('status');
 
-    const md = markdownit({ html: true, breaks: true, linkify: true, typographer: true, tables: true });
+    const md = markdownit({
+      html: true, breaks: true, linkify: true, typographer: true, tables: true,
+      highlight(str, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          try { return hljs.highlight(str, { language: lang }).value; } catch (_) {}
+        }
+        return ''; // use default escaping
+      }
+    });
+    const mdRender = md.render.bind(md);
+    md.render = (src) => {
+      const mathCache = [];
+      // 顺序：先块级 $$...$$ 和 \[...\]，再行内 \(...\) 和 $...$
+      let safeSrc = src.replace(/\$\$(.+?)\$\$/gs, (_, f) => {
+        const idx = mathCache.push({ content: f.trim(), display: true }) - 1;
+        return `XIUIMATHB${idx}XUIEND`;
+      });
+      safeSrc = safeSrc.replace(/\\\[(.+?)\\\]/gs, (_, f) => {
+        const idx = mathCache.push({ content: f.trim(), display: true }) - 1;
+        return `XIUIMATHB${idx}XUIEND`;
+      });
+      safeSrc = safeSrc.replace(/\\\((.+?)\\\)/gs, (_, f) => {
+        const idx = mathCache.push({ content: f.trim(), display: false }) - 1;
+        return `XIUIMATHI${idx}XUIEND`;
+      });
+      safeSrc = safeSrc.replace(/\$(.+?)\$/g, (_, f) => {
+        const idx = mathCache.push({ content: f.trim(), display: false }) - 1;
+        return `XIUIMATHI${idx}XUIEND`;
+      });
+      let html = mdRender(safeSrc);
+      for (let i = 0; i < mathCache.length; i++) {
+        const m = mathCache[i];
+        try {
+          const katexHtml = katex.renderToString(m.content, { throwOnError: false, displayMode: m.display });
+          const placeholder = m.display ? `XIUIMATHB${i}XUIEND` : `XIUIMATHI${i}XUIEND`;
+          html = html.split(placeholder).join(katexHtml);
+        } catch (_) {
+          const placeholder = m.display ? `XIUIMATHB${i}XUIEND` : `XIUIMATHI${i}XUIEND`;
+          html = html.split(placeholder).join(`<code>${m.content}</code>`);
+        }
+      }
+      return html;
+    };
 
     const API_URL = '/api/chat';
     let chatHistory = [];
@@ -257,7 +304,7 @@
                   bubble.insertBefore(reasoningEl, bubble.firstChild);
                   reasoningEl.open = true;
                 }
-                reasoningEl.querySelector('.reasoning-text').textContent += d.reasoning_content;
+                reasoningEl.querySelector('.reasoning-text').innerHTML = md.render(reasoningText);
                 scrollToBottom();
               }
               if (d.reasoning_end && reasoningEl) {
