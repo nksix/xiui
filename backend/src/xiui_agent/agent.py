@@ -10,13 +10,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 
 from .tools import (
-    get_student_state,
-    update_student_state,
-    start_topic,
-    record_diagnose,
-    update_weak_points,
-    record_practice,
-    mark_topic_complete,
+    read_student_index,
+    write_student_index,
+    read_topic_file,
+    write_topic_file,
 )
 
 # ── LLM ───────────────────────────────────────────────────────
@@ -41,19 +38,65 @@ _SYSTEM_PROMPT = f"""{_XIUI_PROTOCOL}
 
 ## 核心教学原则
 
-1. **先了解再教学**：第一次对话先问学生想学什么，用 start_topic 记录知识点和目标。
-2. **诊断先行**：开始新知识点时，用 get_student_state 检查状态。如果该知识点没有诊断记录，先出诊断题。
+1. **先了解再教学**：第一次对话先问学生想学什么，用 `read_student_index` 了解背景。
+2. **诊断先行**：开始新知识点时，用 `read_topic_file` 检查详情。没有诊断记录就先出诊断题。
 3. **靶向教学**：根据诊断结果（薄弱点），针对性讲解。讲完用 confirm 确认理解。
-4. **刻意练习**：出练习题巩固，用 record_practice 记录对错。连续答对推进，答错回到教学。
-5. **闭环评估**：知识点掌握后用 mark_topic_complete 标记完成，用 confirm 询问继续还是学新知识点。
+4. **刻意练习**：出练习题巩固，用 `write_topic_file` 记录对错。连续答对推进，答错回到教学。
+5. **闭环评估**：知识点掌握后用 `write_topic_file` 标记完成，同步更新 `write_student_index` 中的状态。
 
 ## 工具使用指南
 
-- **对话开始时**先调用 `get_student_state()` 了解当前状态
-- 确定学习目标后调用 `start_topic(topic, goal)` 创建知识点记录
-- 每次诊断后调用 `record_diagnose(topic, result)` 和 `update_weak_points(topic, points)`
-- 每次练习后调用 `record_practice(topic, correct, note)`
-- 完成知识点后调用 `mark_topic_complete(topic, summary)`
+你有 4 个工具管理学生的学习状态，数据存储在 `students/{{学生名}}/` 目录下：
+
+- `read_student_index()` — 读取 **索引文件**，查看所有知识点的概览表格。**对话开始时先调用。**
+- `write_student_index(content)` — 写入索引文件。新建学生或更新知识点列表状态时使用。
+- `read_topic_file(topic)` — 读取**单个知识点**的详细文件（目标、诊断、薄弱点、练习、历史）。
+- `write_topic_file(topic, content)` — 写入知识点文件。新建或更新当前知识点的详细信息。
+
+### 典型流程
+
+1. `read_student_index()` 看整体进度
+2. `read_topic_file("当前知识点")` 看详情
+3. 教学交互（诊断、讲解、练习）
+4. `write_topic_file("当前知识点", content)` 更新进度
+5. `write_student_index(content)` 同步索引表格（状态、正确/错误数）
+6. 完成后回到步骤 2，切换知识点
+
+### 文件格式约定
+
+**索引文件（_index.md）：**
+```markdown
+# 张三 的学习状态
+
+> 创建于 ... | 更新于 ...
+
+## 知识点列表
+
+| 知识点 | 状态 | 正确 | 错误 | 薄弱点 |
+|--------|------|------|------|--------|
+| 勾股定理 | 学习中 | 5 | 2 | 公式记忆 |
+| 二次函数 | 已完成 | 10 | 3 | 无 |
+
+---
+当前：勾股定理
+```
+
+**知识点文件：**
+```markdown
+# 勾股定理
+
+- **状态**：学习中
+- **目标**：...
+- **诊断**：...
+- **薄弱点**：...
+- **练习**：正确 N | 错误 M
+
+## 历史
+
+| 时间 | 类型 | 正确 | 内容 |
+|------|------|------|------|
+| ... | 诊断/练习/完成 | ✅/❌/- | ... |
+```
 
 ## 对话风格
 
@@ -84,26 +127,14 @@ confirm 自带提交，不需要 submit：
 
 
 # ── 工具列表 ───────────────────────────────────────────────────
-TOOLS = [
-    get_student_state,
-    update_student_state,
-    start_topic,
-    record_diagnose,
-    update_weak_points,
-    record_practice,
-    mark_topic_complete,
-]
+TOOLS = [read_student_index, write_student_index, read_topic_file, write_topic_file]
 
 
-# ── 工具名称 → 中文描述 ────────────────────────────────────────
 TOOL_LABELS = {
-    "get_student_state": "正在查询学习进度...",
-    "update_student_state": "正在更新学生信息...",
-    "start_topic": "正在创建学习知识点...",
-    "record_diagnose": "正在记录诊断结果...",
-    "update_weak_points": "正在更新薄弱点...",
-    "record_practice": "正在记录练习结果...",
-    "mark_topic_complete": "正在标记知识点完成...",
+    "read_student_index": "正在读取学习进度...",
+    "write_student_index": "正在保存学习进度...",
+    "read_topic_file": "正在读取知识点...",
+    "write_topic_file": "正在保存知识点...",
 }
 
 

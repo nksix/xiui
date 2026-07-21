@@ -1,166 +1,124 @@
-"""ReAct Agent 文件工具 — 读写学生状态，持久化学习进度."""
+"""ReAct Agent 文件工具 — 按学生分目录，索引+分文件管理学习状态."""
 
-import json
+import re
 from pathlib import Path
-from datetime import datetime
-from typing import Any
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
-STATE_FILE = DATA_DIR / "student_state.json"
+STUDENTS_DIR = DATA_DIR / "students"
+
+_INDEX_FILE = "_index.md"
+# 文件名中不允许的字符
+_FILENAME_CLEAN_RE = re.compile(r'[\\/:*?"<>|]')
 
 
-def _ensure_data_dir() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+def _get_student_dir() -> Path | None:
+    """找到当前学生目录。只有 1 个学生时直接用，多个时选 _index.md 最新的."""
+    if not STUDENTS_DIR.exists():
+        return None
+    dirs = [d for d in STUDENTS_DIR.iterdir() if d.is_dir() and (d / _INDEX_FILE).exists()]
+    if not dirs:
+        return None
+    if len(dirs) == 1:
+        return dirs[0]
+    # 多个学生：选 _index.md 修改时间最新的
+    return max(dirs, key=lambda d: (d / _INDEX_FILE).stat().st_mtime)
 
 
-def _load_state() -> dict:
-    """从文件加载学生状态."""
-    _ensure_data_dir()
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    return {
-        "student_name": "",
-        "topics": {},
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat(),
-    }
+def _get_or_create_student_dir(student_name: str) -> Path:
+    """获取或创建学生目录."""
+    safe_name = _FILENAME_CLEAN_RE.sub('_', student_name.strip())
+    if not safe_name:
+        safe_name = "学生"
+    d = STUDENTS_DIR / safe_name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
-def _save_state(state: dict) -> None:
-    """保存状态到文件."""
-    _ensure_data_dir()
-    state["updated_at"] = datetime.now().isoformat()
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+def _make_topic_filename(topic: str) -> str:
+    """将知识点名称转为安全的文件名."""
+    safe = _FILENAME_CLEAN_RE.sub('_', topic.strip())
+    return f"{safe}.md" if safe else "unknown.md"
 
 
-# ── 工具函数（暴露给 Agent）───────────────────────────────────
+# ── 工具函数 ───────────────────────────────────────────────────
 
-def get_student_state() -> str:
-    """读取当前学生的完整学习状态。
-    
-    返回 JSON 格式的状态，包含：
-    - student_name: 学生名字
-    - topics: 按知识点组织的学习记录，每个知识点包含 goal/status/level/notes/history
+def read_student_index() -> str:
+    """读取当前学生的索引文件（_index.md），了解所有知识点的概览。
+
+    包含学生名、创建时间、知识点列表表格（状态/正确/错误/薄弱点）。
+    **每次对话开始时先调用本工具。**
     """
-    state = _load_state()
-    return json.dumps(state, ensure_ascii=False, indent=2)
+    STUDENTS_DIR.mkdir(parents=True, exist_ok=True)
+    student_dir = _get_student_dir()
+    if student_dir is None:
+        return (
+            "暂无学生记录。请先询问学生名字，然后告诉学生你需要用 "
+            "`write_student_index` 创建索引文件，格式参考：\n\n"
+            "# 张三 的学习状态\n\n"
+            "> 创建于 (时间) | 无学习记录\n\n"
+            "---\n\n"
+            "> 暂无学习记录。请开始第一个知识点。"
+        )
+    index_path = student_dir / _INDEX_FILE
+    if index_path.exists():
+        return index_path.read_text(encoding="utf-8")
+    return "索引文件不存在，请用 write_student_index 创建。"
 
 
-def update_student_state(key: str, value: str) -> str:
-    """更新学生状态的顶层字段。key 可选：student_name"""
-    state = _load_state()
-    if key == "student_name":
-        state["student_name"] = value
+def write_student_index(content: str) -> str:
+    """写入当前学生的索引文件。
+
+    用于首次创建学生档案，或更新知识点列表中的状态信息。
+    内容格式参考 read_student_index 返回的格式。
+
+    如果还没有学生目录，会自动创建。学生名从 Markdown 标题（# xxx 的学习状态）中提取。
+    """
+    STUDENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 从头部的 '# xxx 的学习状态' 提取学生名
+    name_match = re.match(r'^#\s+(.+?)的?学习状态', content.strip())
+    if name_match:
+        student_name = name_match.group(1).strip()
     else:
-        return f"错误：不支持的 key '{key}'，目前只支持 'student_name'"
-    _save_state(state)
-    return f"已更新 {key} = {value}"
+        student_dir = _get_student_dir()
+        if student_dir is None:
+            return "错误：无法确定学生名。请在第一行写 '# 学生名 的学习状态'。"
+        student_name = student_dir.name
+
+    student_dir = _get_or_create_student_dir(student_name)
+    (student_dir / _INDEX_FILE).write_text(content, encoding="utf-8")
+    return f"已保存学生「{student_name}」的索引文件"
 
 
-def start_topic(topic: str, goal: str) -> str:
-    """开始或切换到一个知识点。如果知识点不存在则创建，否则切换到该知识点。
-    
+def read_topic_file(topic: str) -> str:
+    """读取指定知识点的详细文件。
+
     Args:
-        topic: 知识点名称，如 '勾股定理'、'二次函数'
-        goal: 学习目标描述
+        topic: 知识点名称，如 '勾股定理'、'数据标注'
     """
-    state = _load_state()
-    if topic not in state["topics"]:
-        state["topics"][topic] = {
-            "goal": goal,
-            "status": "learning",
-            "diagnose_result": None,
-            "weak_points": [],
-            "practice_correct": 0,
-            "practice_wrong": 0,
-            "started_at": datetime.now().isoformat(),
-            "history": [],
-        }
-    state["current_topic"] = topic
-    _save_state(state)
-    return f"已切换到知识点「{topic}」，目标：{goal}"
+    student_dir = _get_student_dir()
+    if student_dir is None:
+        return "暂无学生记录。请先创建学生索引。"
+
+    filename = _make_topic_filename(topic)
+    filepath = student_dir / filename
+    if filepath.exists():
+        return filepath.read_text(encoding="utf-8")
+    return f"知识点「{topic}」的文件不存在（文件名：{filename}）。需要用 write_topic_file 创建。"
 
 
-def record_diagnose(topic: str, result: str) -> str:
-    """记录诊断结果。
-    
+def write_topic_file(topic: str, content: str) -> str:
+    """写入/更新知识点的详细文件。
+
     Args:
         topic: 知识点名称
-        result: 诊断结果描述，如 '基础概念掌握，但应用题薄弱' 或 '不知道勾股定理公式'
+        content: 完整的 Markdown 内容，包含目标、状态、诊断、薄弱点、练习记录、历史表格
     """
-    state = _load_state()
-    if topic not in state.get("topics", {}):
-        return f"错误：知识点「{topic}」不存在，请先调用 start_topic"
-    state["topics"][topic]["diagnose_result"] = result
-    state["topics"][topic]["history"].append({
-        "action": "diagnose",
-        "result": result,
-        "time": datetime.now().isoformat(),
-    })
-    _save_state(state)
-    return f"已记录「{topic}」的诊断结果"
+    student_dir = _get_student_dir()
+    if student_dir is None:
+        return "错误：还没有学生记录。请先用 write_student_index 创建学生档案。"
 
-
-def update_weak_points(topic: str, points: str) -> str:
-    """更新知识点的薄弱环节。
-    
-    Args:
-        topic: 知识点名称
-        points: 逗号分隔的薄弱点列表，如 '公式记忆,实际应用,证明过程'
-    """
-    state = _load_state()
-    if topic not in state.get("topics", {}):
-        return f"错误：知识点「{topic}」不存在"
-    points_list = [p.strip() for p in points.split(",") if p.strip()]
-    state["topics"][topic]["weak_points"] = points_list
-    _save_state(state)
-    return f"已更新「{topic}」的薄弱点：{points_list}"
-
-
-def record_practice(topic: str, correct: bool, note: str = "") -> str:
-    """记录一次练习结果。
-    
-    Args:
-        topic: 知识点名称
-        correct: 是否答对
-        note: 备注（答对的亮点或答错的原因）
-    """
-    state = _load_state()
-    if topic not in state.get("topics", {}):
-        return f"错误：知识点「{topic}」不存在"
-    t = state["topics"][topic]
-    if correct:
-        t["practice_correct"] += 1
-    else:
-        t["practice_wrong"] += 1
-    t["history"].append({
-        "action": "practice",
-        "correct": correct,
-        "note": note,
-        "time": datetime.now().isoformat(),
-    })
-    _save_state(state)
-    total = t["practice_correct"] + t["practice_wrong"]
-    return f"已记录。当前正确 {t['practice_correct']}/{total}，错误 {t['practice_wrong']}/{total}"
-
-
-def mark_topic_complete(topic: str, summary: str) -> str:
-    """标记知识点为已完成。
-    
-    Args:
-        topic: 知识点名称
-        summary: 学习总结
-    """
-    state = _load_state()
-    if topic not in state.get("topics", {}):
-        return f"错误：知识点「{topic}」不存在"
-    state["topics"][topic]["status"] = "completed"
-    state["topics"][topic]["completed_at"] = datetime.now().isoformat()
-    state["topics"][topic]["summary"] = summary
-    state["topics"][topic]["history"].append({
-        "action": "complete",
-        "summary": summary,
-        "time": datetime.now().isoformat(),
-    })
-    _save_state(state)
-    return f"已标记「{topic}」为已完成"
+    filename = _make_topic_filename(topic)
+    filepath = student_dir / filename
+    filepath.write_text(content, encoding="utf-8")
+    return f"已保存知识点「{topic}」→ {filename}"
