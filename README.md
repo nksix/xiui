@@ -223,18 +223,11 @@ const chat = new XIUIChat({
 | `SwitchPlugin` | switch | 开关，解析标签和默认状态 `true/false` |
 | `SubmitPlugin` | submit | 提交按钮，收集同一 formId 的字段值 |
 
-## 示例数据集
+## 示例页面
 
 | 名称 | 说明 |
 |------|------|
-| basic | 选择题 + 滑块 |
-| math | 公式渲染 + 选择题 |
-| multiple | 多卡片选择题 |
-| form | 表单输入 + 选择 |
-| slider | 滑块调节 |
-| switch | 开关设置 |
-| confirm | 确认对话框 |
-| complex | 综合：选择 + 滑块 + 开关 |
+| chat.html | 完整 AI 聊天应用，包含流式渲染、思考过程、公式渲染、XIUI 表单交互 |
 
 ## 技术栈
 
@@ -267,11 +260,11 @@ node server.js
 ## 开发
 
 ```bash
-# 启动开发服务器
-python3 -m http.server 8080
+# 启动开发服务器（推荐）
+npm run dev
 
 # 访问示例页面
-open http://localhost:8080/examples/basic.html
+open http://localhost:3000/examples/chat.html
 ```
 
 ## License

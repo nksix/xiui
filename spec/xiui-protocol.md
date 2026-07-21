@@ -90,7 +90,7 @@ XIUI 定义了一套**扁平化表单交互协议**，核心思想：
 | 参数 | 说明 | 示例 |
 |------|------|------|
 | `form_id` | 表单 ID，用于汇聚同一表单的所有字段 | `s1`, `f2`, `exam1` |
-| `type` | 字段类型 | `choice`, `input`, `tip`, `submit` |
+| `type` | 字段类型 | `choice`, `input`, `confirm`, `slider`, `switch`, `submit` |
 | `type_id` | 字段在表单内的序号 | `q1`, `i1`, `ok` |
 
 ### 3.2 输出示例

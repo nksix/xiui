@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.0.1] - 2026-07-21
+
+### Fixed
+- 修复公式渲染失败问题：将占位符从 `__MATH_BLOCK/INLINE__` 改为 `XIUIMATHB/I`，避免被 markdown-it 解析为粗体；使用 `split().join()` 替代正则替换，避免 KaTeX 输出中的 `$` 被误解释
+- 修复 ChoicePlugin 解析逻辑：检测 `lines[0]` 是否为选项，正确处理无题目行的选择题；渲染时添加字母标签（A. B. C. D.）
+- 修复思考过程不支持 markdown 渲染问题：将 `textContent` 改为 `md.render()` 进行渲染，支持公式显示
+- 修改服务器提示词，要求所有数学公式必须用 `$` 或 `$$` 包裹
+
+### Changed
+- 更新协议规范文档，移除已删除的 `tip` 类型
+- 更新 README 示例页面列表，移除已删除的 `basic.html`
+- 更新 CONTRIBUTING 指南，指向正确的文件路径
+
 ## [4.0.0] - 2026-07-20
 
 ### Changed

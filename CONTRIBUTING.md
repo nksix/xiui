@@ -43,9 +43,9 @@
 ### 添加新卡片类型
 
 1. 在 `spec/xiui-protocol.md` 中定义卡片类型和属性
-2. 在 `src/renderer.js` 的 `extractData` 中添加解析规则
-3. 更新 README 卡片类型表
-4. 在 `examples/basic.html` 中添加示例
+2. 在 `src/xiui.js` 中创建新的 Plugin 类并注册到 `BUILTIN_PLUGINS`
+3. 更新 README 内置插件表
+4. 在 `examples/chat.html` 中添加测试用例
 
 ### 测试
 
