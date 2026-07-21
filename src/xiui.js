@@ -36,8 +36,8 @@
  */
 
 // 严格匹配 xiui@form:表单ID:类型:字段ID，容忍 [@attr] 前的空格
-const CARD_FENCE_RE = /^```xiui@form:(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+)\])?\s*$/;
-const FENCE_END_RE  = /^```\s*$/;
+const CARD_FENCE_RE = /^\s*```xiui@form:(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+)\])?\s*$/;
+const FENCE_END_RE  = /^\s*```\s*$/;
 
 // ═══════════════════════════════════════════════════════════
 // XIUIPlugin 基类 —— 自闭环组件
@@ -533,7 +533,7 @@ export class XIUIChat {
 /* ── 组件样式 ── */
 .card-title{margin-bottom:10px;font-size:14px;font-weight:600;color:var(--xi-text,#e4e4e7);display:flex;align-items:center;gap:6px}
 .card-title::before{content:'◆';font-size:10px;color:var(--xi-accent,#667eea)}
-.card-choice .opt,.card-choice .opt-disabled{display:block;padding:12px 16px;margin:8px 0;border:1.5px solid rgba(102,126,234,.2);border-radius:10px;font-size:14px;transition:all .25s ease;position:relative}
+.card-choice .opt,.card-choice .opt-disabled{display:block;padding:12px 16px;margin:4px 0;border:1.5px solid rgba(102,126,234,.2);border-radius:10px;font-size:14px;transition:all .25s ease;position:relative}
 .card-choice .opt{cursor:pointer;background:rgba(0,0,0,.2)}
 .card-choice .opt:hover{border-color:var(--xi-accent,#667eea);background:rgba(102,126,234,.08);transform:translateX(4px)}
 .card-choice .opt.sel{border-color:var(--xi-accent,#667eea);background:rgba(102,126,234,.15);box-shadow:0 0 0 3px rgba(102,126,234,.1)}
@@ -755,7 +755,7 @@ export class XIUIChat {
           this._lineBuf = this._lineBuf.slice(fenceIdx);
         }
       }
-      if (this._lineBuf.startsWith('`')) return;
+      if (this._lineBuf.trimStart().startsWith('`')) return;
       if (this._state === 'text') {
         if (this._onText) this._onText(this._textBuf + this._lineBuf);
       } else {
@@ -770,7 +770,7 @@ export class XIUIChat {
     if (!this._cardInfo) return;
     const card = this._build(this._cardInfo.formId, this._cardInfo.type, this._cardInfo.typeId, this._cardInfo.attrs, this._cardBuf);
     const el = document.createElement('div');
-    el.className = `x-card card xiui-${card.type}`;
+    el.className = `x-card card card-${card.type}`;
     el.dataset.formId = card.formId;
     el.dataset.typeId = card.typeId;
     this._callRender(card, el);
