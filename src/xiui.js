@@ -247,14 +247,13 @@ class InputPlugin extends XIUIPlugin {
 class SliderPlugin extends XIUIPlugin {
   parse(lines) {
     const title = lines[0] || '';
-    const parts = (lines[1] || '0-100-1-50').split('-');
-    return {
-      title,
-      min: parseFloat(parts[0]) || 0,
-      max: parseFloat(parts[1]) || 100,
-      step: parseFloat(parts[2]) || 1,
-      value: parts.length >= 4 ? parseFloat(parts[3]) : parseFloat(parts[0]) || 0
-    };
+    const rangeLine = lines[1] || '';
+    const parts = rangeLine.split('-').filter(p => p.trim());
+    const min = parseFloat(parts[0]) || 0;
+    const max = parseFloat(parts[1]) || 100;
+    const step = parseFloat(parts[2]) || 1;
+    const value = parts.length >= 4 ? parseFloat(parts[3]) : ((min + max) / 2);
+    return { title, min, max, step, value };
   }
 
   init(ctx) {
@@ -265,16 +264,20 @@ class SliderPlugin extends XIUIPlugin {
   render() {
     const d = this.data;
     const val = this._value || d.value;
-    return (d.title ? this.md.render(d.title) : '')
-      + `<div class="slider-wrap"><input type="range" class="card-slider" min="${d.min}" max="${d.max}" step="${d.step}" value="${val}"${this._submitted ? ' disabled' : ''}><span class="slider-val">${val}</span></div>`;
+    const min = d.min || 0;
+    const max = d.max || 100;
+    const step = d.step || 1;
+    const titleHtml = d.title ? `<div class="card-title">${d.title}</div>` : '';
+    return `${titleHtml}<div class="slider-wrap"><input type="range" class="slider-input" min="${min}" max="${max}" step="${step}" value="${val}"${this._submitted ? ' disabled' : ''}><span class="slider-val">${val}</span></div>`;
   }
 
   afterRender(el) {
     const inp = el.querySelector('input');
     const lbl = el.querySelector('.slider-val');
+    if (!inp || !lbl) return;
     inp.oninput = () => {
-      lbl.textContent = inp.value;            // 实时的 label 更新
-      this.setValue(inp.value, { silent: true }); // 同步值，不重渲染（否则滑块跳）
+      lbl.textContent = inp.value;
+      this.setValue(inp.value, { silent: true });
     };
   }
 }
@@ -294,8 +297,8 @@ class SwitchPlugin extends XIUIPlugin {
   render() {
     const d = this.data;
     const on = this._value === 'true' || this._value === true;
-    return (d.title ? this.md.render(d.title) : '')
-      + `<label class="switch-wrap"><input type="checkbox" class="card-toggle" ${on ? 'checked' : ''}${this._submitted ? ' disabled' : ''}><span class="switch-track"></span></label>`;
+    const titleHtml = d.title ? `<div class="card-title">${d.title}</div>` : '';
+    return `${titleHtml}<label class="switch-wrap"><input type="checkbox" class="card-toggle" ${on ? 'checked' : ''}${this._submitted ? ' disabled' : ''}><span class="switch-track"></span></label>`;
   }
 
   afterRender(el) {
@@ -516,7 +519,8 @@ export class XIUIChat {
 @keyframes x-sk-pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 .x-sk-line{height:12px;background:var(--xi-border,#27272a);border-radius:4px}
 .x-pv{padding:12px 16px;margin:12px 0;border:1px dashed var(--xi-border,#27272a);border-radius:12px;line-height:1.6;font-size:14px}
-.x-card{background:var(--xi-card-bg,#1e1e2f);border:1px solid var(--xi-border,#27272a);border-radius:12px;padding:16px 20px;margin:12px 0}
+.x-card{background:linear-gradient(135deg,rgba(102,126,234,.08),rgba(124,58,237,.05));border:1px solid rgba(102,126,234,.3);border-radius:16px;padding:18px 22px;margin:16px 0;position:relative;overflow:hidden}
+.x-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--xi-accent,#667eea),#7c3aed,var(--xi-accent,#667eea));opacity:.6}
 .x-card-invalid{border-color:#ef4444;animation:x-shake .4s ease}
 .x-card-invalid .card-input{border-color:#ef4444}
 @keyframes x-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
@@ -527,27 +531,35 @@ export class XIUIChat {
 .x-tag-done.ok{background:rgba(34,197,94,.12);color:#22c55e}
 .x-tag-done.cancelled{background:rgba(239,68,68,.1);color:#ef4444}
 /* ── 组件样式 ── */
-.card-choice .opt,.card-choice .opt-disabled{display:block;padding:10px 14px;margin:6px 0;border:1px solid var(--xi-border,#27272a);border-radius:8px;font-size:14px}
-.card-choice .opt{cursor:pointer;transition:all .2s}
-.card-choice .opt:hover{background:rgba(102,126,234,.1);border-color:var(--xi-accent,#667eea)}
-.card-choice .opt.sel{background:rgba(102,126,234,.15);border-color:var(--xi-accent,#667eea)}
-.card-input{width:100%;padding:12px 16px;border:1px solid var(--xi-border,#27272a);border-radius:12px;background:var(--xi-bg,#0f0f23);color:var(--xi-text,#e4e4e7);font-size:15px;outline:none;box-sizing:border-box}
-.card-input:focus{border-color:var(--xi-accent,#667eea)}
-.slider-wrap{display:flex;align-items:center;gap:12px;margin-top:4px}
-.card-slider{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:var(--xi-bg,#0f0f23);outline:none;margin:8px 0}
-.card-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--xi-accent,#667eea);cursor:pointer;margin-top:-7px}
-.card-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--xi-accent,#667eea);cursor:pointer;border:none}
-.slider-val{min-width:32px;text-align:center;font-weight:600;color:var(--xi-accent,#667eea);font-size:15px}
-.switch-wrap{display:inline-flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer}
+.card-title{margin-bottom:10px;font-size:14px;font-weight:600;color:var(--xi-text,#e4e4e7);display:flex;align-items:center;gap:6px}
+.card-title::before{content:'◆';font-size:10px;color:var(--xi-accent,#667eea)}
+.card-choice .opt,.card-choice .opt-disabled{display:block;padding:12px 16px;margin:8px 0;border:1.5px solid rgba(102,126,234,.2);border-radius:10px;font-size:14px;transition:all .25s ease;position:relative}
+.card-choice .opt{cursor:pointer;background:rgba(0,0,0,.2)}
+.card-choice .opt:hover{border-color:var(--xi-accent,#667eea);background:rgba(102,126,234,.08);transform:translateX(4px)}
+.card-choice .opt.sel{border-color:var(--xi-accent,#667eea);background:rgba(102,126,234,.15);box-shadow:0 0 0 3px rgba(102,126,234,.1)}
+.card-choice .opt.sel::after{content:'✓';position:absolute;right:12px;color:var(--xi-accent,#667eea);font-weight:600}
+.card-input{width:100%;padding:14px 18px;border:1.5px solid rgba(102,126,234,.2);border-radius:12px;background:rgba(0,0,0,.3);color:var(--xi-text,#e4e4e7);font-size:15px;outline:none;box-sizing:border-box;transition:all .25s ease}
+.card-input:focus{border-color:var(--xi-accent,#667eea);box-shadow:0 0 0 3px rgba(102,126,234,.1),0 0 20px rgba(102,126,234,.1)}
+.card-input::placeholder{color:rgba(161,161,170,.5)}
+.slider-wrap{display:flex;align-items:center;gap:16px;margin-top:8px}
+.slider-input{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:rgba(255,255,255,.1);outline:none;padding:0}
+.slider-input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--xi-accent,#667eea);cursor:pointer;box-shadow:0 0 8px rgba(102,126,234,.4);transition:transform .2s}
+.slider-input::-webkit-slider-thumb:hover{transform:scale(1.15)}
+.slider-input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--xi-accent,#667eea);cursor:pointer;box-shadow:0 0 8px rgba(102,126,234,.4)}
+.slider-val{min-width:40px;text-align:center;font-weight:600;color:var(--xi-accent,#667eea);font-size:15px;background:rgba(102,126,234,.1);padding:4px 10px;border-radius:6px}
+.switch-wrap{display:inline-flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer}
 .card-toggle{display:none}
-.switch-track{width:44px;height:24px;border-radius:12px;background:var(--xi-border,#27272a);position:relative;transition:background .2s}
-.switch-track::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
-.card-toggle:checked+.switch-track{background:var(--xi-accent,#667eea)}
-.card-toggle:checked+.switch-track::after{transform:translateX(20px)}
+.switch-track{width:50px;height:28px;border-radius:14px;background:rgba(0,0,0,.4);position:relative;transition:all .25s ease}
+.switch-track::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:all .25s ease;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.card-toggle:checked+.switch-track{background:linear-gradient(90deg,var(--xi-accent,#667eea),#7c3aed);box-shadow:0 0 15px rgba(102,126,234,.3)}
+.card-toggle:checked+.switch-track::after{transform:translateX(22px);box-shadow:0 2px 6px rgba(0,0,0,.2)}
 .bts{display:flex;gap:12px;margin-top:16px}
-.btn-pri{flex:1;padding:12px 24px;background:var(--xi-accent,#667eea);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px}
-.btn-ghost{flex:1;padding:12px 24px;background:var(--xi-bg,#0f0f23);color:var(--xi-mute,#a1a1aa);border:1px solid var(--xi-border,#27272a);border-radius:10px;cursor:pointer;font-size:15px}
-.btn-submit{background:var(--xi-accent,#667eea);color:#fff;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:15px;margin:12px 0}
+.btn-pri{flex:1;padding:14px 24px;background:linear-gradient(135deg,var(--xi-accent,#667eea),#7c3aed);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:600;transition:all .25s ease;box-shadow:0 4px 12px rgba(102,126,234,.3)}
+.btn-pri:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(102,126,234,.4)}
+.btn-ghost{flex:1;padding:14px 24px;background:rgba(0,0,0,.3);color:var(--xi-text,#e4e4e7);border:1.5px solid rgba(102,126,234,.2);border-radius:12px;cursor:pointer;font-size:15px;transition:all .25s ease}
+.btn-ghost:hover{border-color:var(--xi-accent,#667eea);background:rgba(102,126,234,.05)}
+.btn-submit{background:linear-gradient(135deg,var(--xi-accent,#667eea),#7c3aed);color:#fff;border:none;padding:14px 40px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:600;margin:16px 0;transition:all .25s ease;box-shadow:0 4px 12px rgba(102,126,234,.3);width:100%}
+.btn-submit:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(102,126,234,.4)}
 `.trim();
     document.head.appendChild(style);
   }
@@ -689,13 +701,13 @@ export class XIUIChat {
   _replaceCardBlocks(container) {
     const codes = container.querySelectorAll('pre code');
     codes.forEach(code => {
-      const m = code.className.match(/language-xiui@form:(\w+):(\w+):(\w+)\s*(?:\[@(.+?)\])?/);
+      const m = code.className.match(/language-xiui@form:(\w+):(\w+)(?::(\w+))?\s*(?:\[@(.+?)\])?/);
       if (!m) return;
       const pre = code.parentElement;
       const rawText = this._dec(code.innerHTML);
       const card = this._build(m[1], m[2], m[3], m[4], rawText);
       const el = document.createElement('div');
-      el.className = `x-card card card-${card.type}`;
+      el.className = `x-card card xiui-${card.type}`;
       el.dataset.formId = card.formId;
       el.dataset.typeId = card.typeId;
       this._callRender(card, el);
@@ -758,9 +770,9 @@ export class XIUIChat {
     if (!this._cardInfo) return;
     const card = this._build(this._cardInfo.formId, this._cardInfo.type, this._cardInfo.typeId, this._cardInfo.attrs, this._cardBuf);
     const el = document.createElement('div');
-    el.className = `card card-${card.type}`;
+    el.className = `x-card card xiui-${card.type}`;
     el.dataset.formId = card.formId;
-    el.dataset.cardId = card.typeId;
+    el.dataset.typeId = card.typeId;
     this._callRender(card, el);
     if (this._onCard) this._onCard(card, el);
     this._cardInfo = null;
@@ -845,19 +857,6 @@ export class XIUIChat {
     const { valid, missing } = this.validate(formId);
     if (!valid) {
       if (this._bubble) {
-        // 显示友好的错误提示
-        const names = missing.map(m => `<b>「${m.label}」</b>`).join('、');
-        const msg = document.createElement('div');
-        msg.className = 'x-valid-msg';
-        msg.innerHTML = `请完成以下字段：${names}`;
-        // 插入到 bubble 顶部（第一个 x-card 之前）
-        const firstCard = this._bubble.querySelector('.x-card');
-        if (firstCard) {
-          this._bubble.insertBefore(msg, firstCard);
-        } else {
-          this._bubble.appendChild(msg);
-        }
-        // 高亮缺失字段 + 滚动到第一个
         missing.forEach((m, i) => {
           const el = this._bubble.querySelector(`[data-typeid="${m.typeId}"]`);
           if (el) {
