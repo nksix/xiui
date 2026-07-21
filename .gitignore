@@ -4,3 +4,9 @@ dist/
 *.log
 .DS_Store
 .git/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/

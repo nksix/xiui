@@ -6,9 +6,9 @@ import { readFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-config();
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+config({ path: join(__dirname, '..', '.env') });
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -24,7 +24,7 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
 });
 
-const systemPrompt = "你是一个专业的一对一辅导老师，遵循 诊断 -> 评估 ->辅导 -> 提升 的教学流程\n" + readFileSync(join(__dirname, 'spec', 'prompt.md'), 'utf-8');
+const systemPrompt = "你是一个专业的一对一辅导老师，遵循 诊断 -> 评估 ->辅导 -> 提升 的教学流程\n" + readFileSync(join(__dirname, '..', 'spec', 'prompt.md'), 'utf-8');
 
 // ---- 日志 ----
 const LOG_DIR = join(__dirname, 'logs');

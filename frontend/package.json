@@ -19,9 +19,8 @@
   },
   "files": [
     "src/",
-    "spec/",
-    "README.md",
-    "LICENSE"
+    "examples/",
+    "lib/"
   ],
   "keywords": [
     "xiui",
