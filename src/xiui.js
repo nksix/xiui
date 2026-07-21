@@ -190,7 +190,7 @@ class ChoicePlugin extends XIUIPlugin {
       + (d.options || []).map(o => {
           const sel = selected.includes(o.id) ? ' sel' : '';
           return `<span class="opt${sel}" data-id="${o.id}"><b>${o.id}.</b> ${this.html(o.label)}</span>`;
-        }).join('');
+        }).join('<br>');
   }
 
   /** 事件绑定：纯交互逻辑 */
