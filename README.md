@@ -209,7 +209,7 @@ const chat = new XIUIChat({
 
 | 名称 | 说明 |
 |------|------|
-| chat.html | 完整 AI 聊天应用，包含流式渲染、思考过程、公式渲染、XIUI 表单交互 |
+| index.html | 完整 AI 聊天应用，包含流式渲染、思考过程、公式渲染、XIUI 表单交互 |
 
 ## 技术栈
 
@@ -219,7 +219,7 @@ const chat = new XIUIChat({
 
 ## Chat Demo
 
-`examples/chat.html` 是一个完整的 AI 聊天应用示例，包含：
+`examples/index.html` 是一个完整的 AI 聊天应用示例，包含：
 
 - **流式 SSE**：通过 `server.js` 代理 OpenAI 兼容 API，支持流式输出
 - **思考过程展示**：自动捕获模型的 `reasoning_content`（如 DeepSeek R1），以折叠面板展示思考过程
@@ -236,14 +236,14 @@ OPENAI_MODEL=deepseek-reasoner
 
 # 启动
 node server.js
-# 访问 http://localhost:3000/examples/chat.html
+# 访问 http://localhost:3000/examples/
 ```
 
 ## 开发
 
 ```bash
 npm run dev
-open http://localhost:3000/examples/chat.html
+open http://localhost:3000/examples/
 ```
 
 ## License

@@ -149,5 +149,5 @@ app.get('/api/health', (req, res) => {
 
 app.listen(port, () => {
   console.log(`XIUI Server running on http://localhost:${port}`);
-  console.log(`Chat demo: http://localhost:${port}/examples/chat.html`);
+  console.log(`Chat demo: http://localhost:${port}/examples/`);
 });
