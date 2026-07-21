@@ -176,6 +176,12 @@ async def stream_agent(messages: list[dict]) -> AsyncIterator:
         if isinstance(event, tuple):
             chunk, meta = event
 
+            # 捕获推理模型的思考过程（DeepSeek-R1 / o1 等）
+            addl = getattr(chunk, "additional_kwargs", {}) or {}
+            reasoning = addl.get("reasoning_content", "")
+            if reasoning:
+                yield {"reasoning": reasoning}
+
             # 检测工具调用
             tool_calls = getattr(chunk, "tool_calls", None)
             if tool_calls:

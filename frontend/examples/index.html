@@ -276,6 +276,7 @@
       reasoningEl = null;
       reasoningDone = false;
       reasoningText = '';
+      let reasonRenderPending = false;
 
       try {
         const response = await fetch(API_URL, {
@@ -309,7 +310,17 @@
                   bubble.insertBefore(reasoningEl, bubble.firstChild);
                   reasoningEl.open = true;
                 }
-                reasoningEl.querySelector('.reasoning-text').innerHTML = md.render(reasoningText);
+                // 批处理：RAF 避免逐块全量替换闪烁
+                if (!reasonRenderPending) {
+                  reasonRenderPending = true;
+                  requestAnimationFrame(() => {
+                    reasonRenderPending = false;
+                    const el = reasoningEl;
+                    if (!el) return;
+                    const rtEl = el.querySelector('.reasoning-text');
+                    if (rtEl) rtEl.innerHTML = md.render(reasoningText);
+                  });
+                }
                 scrollToBottom();
               }
               if (d.reasoning_end && reasoningEl) {
@@ -332,6 +343,11 @@
                   reasoningDone = true;
                   reasoningEl.open = false;
                   reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
+                }
+                // 确保最后一批思考内容渲染完成
+                if (reasoningEl) {
+                  const rtEl = reasoningEl.querySelector('.reasoning-text');
+                  if (rtEl) rtEl.innerHTML = md.render(reasoningText);
                 }
                 chat.flush();
               }

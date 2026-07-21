@@ -82,6 +82,9 @@ async def chat(request: Request):
                     # 工具调用 → 显示在思考面板
                     label = chunk["label"]
                     yield "data: " + json.dumps({"reasoning_content": "🔧 " + label}) + "\n\n"
+                elif isinstance(chunk, dict) and "reasoning" in chunk:
+                    # 模型推理过程 → 思考面板
+                    yield "data: " + json.dumps({"reasoning_content": chunk["reasoning"]}) + "\n\n"
                 else:
                     # 文本内容
                     yield f"data: {json.dumps({'content': chunk})}\n\n"

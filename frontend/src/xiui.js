@@ -468,6 +468,8 @@ export class XIUIChat {
     this._cardInfo = null;
     this._cards = [];           // [{ formId, type, typeId, data, plugin }]
     this._submitted = false;
+    this._tPending = undefined;
+    this._tRenderPending = false;
   }
 
   // ─── 内部：plugin 状态变化回调 ──────────────────────
@@ -590,25 +592,35 @@ export class XIUIChat {
 
   _defaultOnText(t) {
     if (!t || !this._bubble) return;
-    const lastCard = this._bubble.querySelector('.x-card:last-of-type');
-    let tb;
-    if (lastCard) {
-      tb = lastCard.nextElementSibling;
-      if (!tb || !tb.classList.contains('x-text')) {
-        tb = document.createElement('div');
-        tb.className = 'x-text';
-        lastCard.after(tb);
+    // 批处理：每帧最多渲染一次，避免逐字全量替换闪烁
+    this._tPending = t;
+    if (this._tRenderPending) return;
+    this._tRenderPending = true;
+    const self = this;
+    requestAnimationFrame(() => {
+      self._tRenderPending = false;
+      const text = self._tPending;
+      if (!text) return;
+      const lastCard = self._bubble.querySelector('.x-card:last-of-type');
+      let tb;
+      if (lastCard) {
+        tb = lastCard.nextElementSibling;
+        if (!tb || !tb.classList.contains('x-text')) {
+          tb = document.createElement('div');
+          tb.className = 'x-text';
+          lastCard.after(tb);
+        }
+      } else {
+        tb = self._bubble.querySelector('.x-text:last-of-type');
+        if (!tb) {
+          tb = document.createElement('div');
+          tb.className = 'x-text';
+          self._bubble.appendChild(tb);
+        }
       }
-    } else {
-      tb = this._bubble.querySelector('.x-text:last-of-type');
-      if (!tb) {
-        tb = document.createElement('div');
-        tb.className = 'x-text';
-        this._bubble.appendChild(tb);
-      }
-    }
-    tb.innerHTML = this._mdRender(t);
-    this._bubble.scrollIntoView({ block: 'end', behavior: 'instant' });
+      tb.innerHTML = self._mdRender(text);
+      self._bubble.scrollIntoView({ block: 'end', behavior: 'instant' });
+    });
   }
 
   _defaultOnCardBegin(formId, type, typeId) {
@@ -621,15 +633,25 @@ export class XIUIChat {
 
   _defaultOnCardUpdate(t) {
     if (!this._bubble) return;
-    const sk = this._bubble.querySelector('.x-sk');
-    if (sk) sk.remove();
-    let pv = this._bubble.querySelector('.x-pv');
-    if (!pv) {
-      pv = document.createElement('div');
-      pv.className = 'x-pv';
-      this._bubble.appendChild(pv);
-    }
-    pv.innerHTML = this._mdRender(t);
+    // 批处理：跟 _defaultOnText 共用同一个 RAF 锁
+    this._cPending = t;
+    if (this._tRenderPending) return;  // 共用文本渲染的 RAF 锁
+    this._tRenderPending = true;
+    const self = this;
+    requestAnimationFrame(() => {
+      self._tRenderPending = false;
+      const text = self._cPending || self._tPending;
+      if (!text) return;
+      const sk = self._bubble.querySelector('.x-sk');
+      if (sk) sk.remove();
+      let pv = self._bubble.querySelector('.x-pv');
+      if (!pv) {
+        pv = document.createElement('div');
+        pv.className = 'x-pv';
+        self._bubble.appendChild(pv);
+      }
+      pv.innerHTML = self._mdRender(text);
+    });
   }
 
   _defaultOnCard(card, el) {
