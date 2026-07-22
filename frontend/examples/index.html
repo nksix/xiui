@@ -95,6 +95,36 @@
     .dbg-bar { display:flex; gap:6px; justify-content:flex-end; margin-top:8px; }
     .dbg-btn { padding:2px 10px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; }
     .dbg-btn.on { background:rgba(102,126,234,.2); color:var(--accent); border-color:var(--accent); }
+
+    /* ── 知识图谱 ── */
+    .graph-panel { border-top:1px solid var(--border); background:var(--bg2); transition:all .3s; }
+    .graph-header { display:flex; justify-content:space-between; align-items:center; padding:8px 16px; cursor:pointer; user-select:none; }
+    .graph-title { font-size:13px; font-weight:600; color:var(--mute); }
+    .graph-toggle { background:none; border:none; color:var(--mute); font-size:16px; cursor:pointer; padding:0 4px; line-height:1; }
+    .graph-body { position:relative; padding:8px 16px 12px; overflow:hidden; overflow-x:auto; transition:max-height .3s; }
+    .graph-body.collapsed { max-height:0; padding-top:0; padding-bottom:0; }
+    .graph-body svg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+    .graph-nodes { position:relative; }
+    .g-node {
+      position:absolute; transform:translate(-50%,-50%);
+      padding:6px 14px; border-radius:20px; font-size:13px; font-weight:500;
+      white-space:nowrap; cursor:pointer; text-align:center;
+      transition:all .25s; user-select:none; z-index:1;
+    }
+    .g-node.done { background:#22c55e20; color:#22c55e; border:2px solid #22c55e; }
+    .g-node.current { background:#667eea20; color:var(--accent); border:2px solid var(--accent);
+      animation: node-pulse 2s infinite; }
+    .g-node.locked { background:var(--bg3); color:#52525b; border:2px solid #3f3f46; cursor:not-allowed; }
+    .g-node.unlocked { background:var(--bg3); color:var(--mute); border:2px solid var(--border); }
+    .g-node.unlocked:hover { border-color:var(--accent); color:var(--text); }
+    @keyframes node-pulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(102,126,234,.4); }
+      50% { box-shadow:0 0 0 8px rgba(102,126,234,0); }
+    }
+    .g-line { fill:none; stroke:var(--border); stroke-width:2; }
+    .g-line.done { stroke:#22c55e; stroke-width:2.5; }
+    .g-line.active { stroke:var(--accent); stroke-width:2; stroke-dasharray:6 3; animation: dash-flow .6s linear infinite; }
+    @keyframes dash-flow { to { stroke-dashoffset:-9; } }
   </style>
 </head>
 <body>
@@ -107,6 +137,17 @@
       </p>
     </div>
     <div class="messages" id="messages"></div>
+    <!-- 知识图谱 -->
+    <div class="graph-panel" id="graph-panel" style="display:none">
+      <div class="graph-header">
+        <span class="graph-title" id="graph-title">知识图谱</span>
+        <button class="graph-toggle" id="graph-toggle" title="折叠/展开">−</button>
+      </div>
+      <div class="graph-body" id="graph-body">
+        <svg id="graph-svg"></svg>
+        <div class="graph-nodes" id="graph-nodes"></div>
+      </div>
+    </div>
     <div class="input-area">
       <div class="input-bar">
         <textarea id="input" placeholder="输入消息..." rows="1"></textarea>
@@ -187,6 +228,17 @@
     let reasoningDone = false;
     let reasoningText = '';
 
+    // ═══ 知识图谱 ═══
+    let graphData = null;      // 课程配置
+    let graphProgress = null;  // 学生进度
+    let graphScale = 1;        // 缩放比例
+    const graphPanel = document.getElementById('graph-panel');
+    const graphSvg = document.getElementById('graph-svg');
+    const graphNodes = document.getElementById('graph-nodes');
+    const graphToggle = document.getElementById('graph-toggle');
+    const graphTitle = document.getElementById('graph-title');
+    const graphBody = document.getElementById('graph-body');
+
     // ═══ 一行接入 ═══
     const chat = new XIUIChat({ md });
     let lastAssistantIdx = -1;
@@ -253,6 +305,99 @@
     }
 
     function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+    // ═══ 知识图谱 — 渲染 ═══
+    async function loadKnowledgeGraph(student = '孙悟空') {
+      try {
+        const [courseRes, progressRes] = await Promise.all([
+          fetch('/api/course'),
+          fetch(`/api/course/progress?student=${encodeURIComponent(student)}`)
+        ]);
+        graphData = await courseRes.json();
+        graphProgress = await progressRes.json();
+        if (graphData.nodes) renderKnowledgeGraph();
+      } catch (e) { console.warn('[Graph] 加载失败:', e); }
+    }
+
+    function renderKnowledgeGraph() {
+      if (!graphData || !graphProgress) return;
+      graphPanel.style.display = '';
+      graphTitle.textContent = graphData.name;
+      const scale = graphScale;
+      const nodes = graphData.nodes;
+      const edges = graphData.edges;
+
+      // 计算 SVG 画布尺寸
+      const maxX = Math.max(...nodes.map(n => n.x)) + 100;
+      const maxY = Math.max(...nodes.map(n => n.y)) + 60;
+      const svgW = maxX * scale, svgH = maxY * scale;
+      graphSvg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+      graphSvg.setAttribute('width', svgW);
+      graphSvg.setAttribute('height', svgH);
+      graphSvg.style.position = 'absolute';
+
+      // 画连线
+      let svgHtml = '';
+      for (const e of edges) {
+        const from = nodes.find(n => n.id === e.from);
+        const to = nodes.find(n => n.id === e.to);
+        if (!from || !to) continue;
+        const midY = (from.y + to.y) / 2;
+        const path = `M${from.x},${from.y + 12} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 12}`;
+        const edgeDone = graphProgress.completed.includes(e.to);
+        const edgeActive = graphProgress.current === e.to && !graphProgress.completed.includes(e.to);
+        let cls = 'g-line';
+        if (edgeDone) cls += ' done';
+        else if (edgeActive) cls += ' active';
+        svgHtml += `<path d="${path}" class="${cls}"/>`;
+      }
+      graphSvg.innerHTML = svgHtml;
+
+      // 节点
+      let nodesHtml = '';
+      for (const n of nodes) {
+        const isDone = graphProgress.completed.includes(n.id);
+        const isCurrent = graphProgress.current === n.id;
+        const isLocked = graphProgress.locked.includes(n.id);
+        let cls = 'g-node';
+        let label = '';
+        if (isDone) { cls += ' done'; label = ' ✓'; }
+        else if (isCurrent) { cls += ' current'; }
+        else if (isLocked) { cls += ' locked'; label = ' 🔒'; }
+        else { cls += ' unlocked'; }
+        nodesHtml += `<div class="${cls}" data-node="${n.id}"
+          style="left:${n.x * scale}px;top:${n.y * scale}px"
+          title="${n.brief}">${n.name}${label}</div>`;
+      }
+      graphNodes.innerHTML = nodesHtml;
+      graphNodes.style.width = maxX * scale + 'px';
+      graphNodes.style.height = maxY * scale + 'px';
+
+      // 点击节点 → 触发学习
+      graphNodes.querySelectorAll('.g-node:not(.locked)').forEach(el => {
+        el.onclick = () => {
+          const nodeId = el.dataset.node;
+          const node = graphData.nodes.find(n => n.id === nodeId);
+          if (node && !isSending) {
+            inputEl.value = `学习「${node.name}」`;
+            send();
+          }
+        };
+      });
+    }
+
+    // 折叠/展开
+    const graphHeader = graphPanel.querySelector('.graph-header');
+    graphHeader.onclick = (e) => {
+      if (e.target === graphToggle) return;
+      graphBody.classList.toggle('collapsed');
+      graphToggle.textContent = graphBody.classList.contains('collapsed') ? '+' : '−';
+    };
+    graphToggle.onclick = (e) => {
+      e.stopPropagation();
+      graphBody.classList.toggle('collapsed');
+      graphToggle.textContent = graphBody.classList.contains('collapsed') ? '+' : '−';
+    };
 
     async function send() {
       const text = inputEl.value.trim();
@@ -385,6 +530,8 @@
       } finally {
         isSending = false;
         sendBtn.disabled = false;
+        // 每次对话后刷新知识图谱进度
+        loadKnowledgeGraph();
       }
     }
 
@@ -415,6 +562,9 @@
         setTimeout(tick, 30 + Math.random() * 20);
       };
       tick();
+
+      // 加载知识图谱
+      await loadKnowledgeGraph();
 
       try {
         const res = await fetch('/api/health');

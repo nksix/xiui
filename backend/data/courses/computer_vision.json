@@ -1,0 +1,20 @@
+{
+  "id": "computer_vision",
+  "name": "计算机视觉入门",
+  "nodes": [
+    { "id": "cv_intro",       "name": "计算机视觉基础",   "brief": "图像表示、颜色空间、滤波",                     "x": 400, "y": 30 },
+    { "id": "classification",  "name": "图像分类",         "brief": "CNN、迁移学习、经典模型",                     "x": 160, "y": 160 },
+    { "id": "detection",       "name": "目标检测",         "brief": "YOLO、Faster R-CNN、Anchor",                 "x": 640, "y": 160 },
+    { "id": "confusion",       "name": "混淆矩阵与评估",   "brief": "TP/FP/TN/FN、精确率、召回率、F1",             "x": 160, "y": 290 },
+    { "id": "mAP_iou",         "name": "mAP 与 IoU",      "brief": "检测任务评估指标、NMS",                       "x": 640, "y": 290 },
+    { "id": "cv_project",      "name": "综合项目实战",     "brief": "端到端 CV 项目：数据→训练→评估→部署",       "x": 400, "y": 420 }
+  ],
+  "edges": [
+    { "from": "cv_intro",      "to": "classification" },
+    { "from": "cv_intro",      "to": "detection" },
+    { "from": "classification", "to": "confusion" },
+    { "from": "detection",      "to": "mAP_iou" },
+    { "from": "confusion",      "to": "cv_project" },
+    { "from": "mAP_iou",        "to": "cv_project" }
+  ]
+}
