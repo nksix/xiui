@@ -167,6 +167,7 @@ async def stream_agent(messages: list[dict]) -> AsyncIterator:
     config = {"configurable": {"thread_id": "default"}}
 
     seen_tools: set[str] = set()
+    tool_result_summary = ""  # 最近一次工具返回的摘要
 
     async for event in agent.astream(
         {"messages": lc_messages},
@@ -189,7 +190,20 @@ async def stream_agent(messages: list[dict]) -> AsyncIterator:
                     name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
                     if name and name not in seen_tools:
                         seen_tools.add(name)
-                        yield {"tool": name, "label": TOOL_LABELS.get(name, f"正在执行 {name}...")}
+                        label = TOOL_LABELS.get(name, name)
+                        yield {"tool": name, "label": f"调用工具：{label}"}
+
+            # 工具返回 → 摘取摘要送入思考面板
+            node = meta.get("langgraph_node", "")
+            if node == "tools":
+                tc = getattr(chunk, "content", "")
+                if tc and isinstance(tc, str) and tool_result_summary != tc[:200]:
+                    tool_result_summary = tc[:200]
+                    # 取第一行有效内容作为摘要
+                    first_line = tc.strip().split("\n")[0].strip()
+                    if first_line and not first_line.startswith("#"):
+                        first_line = first_line[:100]
+                        yield {"reasoning": f"获取结果：{first_line}..."}
 
             # 输出文本内容（跳过工具调用块和工具回复块）
             content = getattr(chunk, "content", "")
