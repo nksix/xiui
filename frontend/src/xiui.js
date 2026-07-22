@@ -469,7 +469,8 @@ export class XIUIChat {
     this._cards = [];           // [{ formId, type, typeId, data, plugin }]
     this._submitted = false;
     this._pendingText = '';
-    this._renderTid = null;
+    this._textRenderTid = null;
+    this._cardRenderTid = null;
   }
 
   // ─── 内部：plugin 状态变化回调 ──────────────────────
@@ -594,9 +595,9 @@ export class XIUIChat {
     if (!t || !this._bubble) return;
     // 30ms debounce：平滑流式输出，避免逐字全量渲染
     this._pendingText = t;
-    if (this._renderTid) return;
-    this._renderTid = setTimeout(() => {
-      this._renderTid = null;
+    if (this._textRenderTid) return;
+    this._textRenderTid = setTimeout(() => {
+      this._textRenderTid = null;
       this._renderTextNow(this._pendingText);
     }, 30);
   }
@@ -611,24 +612,20 @@ export class XIUIChat {
 
   _defaultOnCardUpdate(t) {
     if (!this._bubble) return;
-    // 共用 _defaultOnText 的 debounce 锁
-    if (this._renderTid) return;
-    const self = this;
-    const doRender = () => {
-      self._renderTid = null;
-      const text = t;
-      if (!text) return;
-      const sk = self._bubble.querySelector('.x-sk');
+    if (this._cardRenderTid) return;
+    this._cardRenderTid = setTimeout(() => {
+      this._cardRenderTid = null;
+      if (!t) return;
+      const sk = this._bubble.querySelector('.x-sk');
       if (sk) sk.remove();
-      let pv = self._bubble.querySelector('.x-pv');
+      let pv = this._bubble.querySelector('.x-pv');
       if (!pv) {
         pv = document.createElement('div');
         pv.className = 'x-pv';
-        self._bubble.appendChild(pv);
+        this._bubble.appendChild(pv);
       }
-      pv.innerHTML = self._mdRender(text);
-    };
-    this._renderTid = setTimeout(doRender, 30);
+      pv.innerHTML = this._mdRender(t);
+    }, 30);
   }
 
   _defaultOnCard(card, el) {
@@ -683,7 +680,8 @@ export class XIUIChat {
   flush() {
     if (this._flushTimer) { clearTimeout(this._flushTimer); this._flushTimer = null; }
     // 清掉 debounce 定时器，立即渲染最后一批文本
-    if (this._renderTid) { clearTimeout(this._renderTid); this._renderTid = null; }
+    if (this._textRenderTid) { clearTimeout(this._textRenderTid); this._textRenderTid = null; }
+    if (this._cardRenderTid) { clearTimeout(this._cardRenderTid); this._cardRenderTid = null; }
     if (this._pendingText) { this._renderTextNow(this._pendingText); this._pendingText = ''; }
     if (this._lineBuf && this._state === 'card') {
       if (FENCE_END_RE.test(this._lineBuf)) {
