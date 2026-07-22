@@ -2,597 +2,708 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>XIUI Chat Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XIUI - 知识图谱学习</title>
   <script src="/npm/markdown-it/dist/markdown-it.min.js?v=2"></script>
   <link rel="stylesheet" href="/npm/katex/dist/katex.min.css">
   <script src="/npm/katex/dist/katex.min.js?v=2"></script>
   <link rel="stylesheet" href="/npm/highlight.js/styles/github-dark.min.css">
   <script type="module" src="/lib/hljs-bundle.js?v=3"></script>
   <style>
-    :root { --bg:#0f0f23; --bg2:#1a1a2e; --bg3:#16213e; --text:#e4e4e7; --mute:#a1a1aa; --accent:#667eea; --border:#27272a;
-            --xi-bg:#0f0f23; --xi-bg2:#1a1a2e; --xi-text:#e4e4e7; --xi-border:#27272a; --xi-accent:#667eea; --xi-accent2:#7c3aed; --xi-card-bg:#1e1e2f; }
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system,sans-serif; margin:0; padding:0; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
-    .chat-wrap { flex:1; display:flex; flex-direction:column; max-width:900px; margin:0 auto; width:100%; }
-    .header { padding:16px 20px; border-bottom:1px solid var(--border); }
-    .header h1 { margin:0; font-size:18px; font-weight:600; }
-    .header p { margin:4px 0 0; font-size:13px; color:var(--mute); }
-    .messages { flex:1; overflow-y:auto; padding:20px; }
-    .msg { display:flex; gap:12px; margin-bottom:16px; animation:in .3s ease; }
-    @keyframes in { from{opacity:0;transform:translateY(5px)} }
-    .msg.user { flex-direction:row-reverse; }
-    .msg.user .bubble { background:var(--accent); color:#fff; border-radius:16px 0 16px 16px; }
-    .avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; }
-    .avatar.ai { background:linear-gradient(135deg,var(--accent),#7c3aed); color:#fff; }
-    .avatar.user { background:var(--bg3); color:var(--mute); border:1px solid var(--border); }
-    .bubble { max-width:70%; min-width:0; padding:12px 16px; background:var(--bg2); border-radius:0 16px 16px 16px; line-height:1.6; font-size:15px; }
-    .msg.user .bubble { max-width:80%; }
-    .bubble p { margin:0 0 8px; font-size:inherit; } .bubble p:last-child { margin:0; }
-    .bubble pre { background:var(--bg); border-radius:8px; padding:12px; overflow-x:auto; margin:12px 0; }
-    .bubble pre code { font-size:13px; background:none; padding:0; }
-    .bubble code { font-size:13px; background:var(--bg); padding:2px 6px; border-radius:4px; }
-    .bubble .katex { font-size:1.1em; }
-    .bubble .katex-display { overflow-x:auto; overflow-y:hidden; margin:12px 0; }
-    .bubble table { border-collapse:collapse; width:100%; margin:12px 0; }
-    .bubble th { background:var(--bg3); font-weight:600; }
-    .bubble th,.bubble td { padding:8px 12px; border:1px solid var(--border); text-align:left; }
-    .bubble blockquote { border-left:3px solid var(--accent); margin:8px 0; padding:4px 12px; color:var(--mute); }
-
-    .reasoning-block { margin:8px 0 12px; padding:12px 16px; background:rgba(251,191,36,.08); border-left:3px solid #f59e0b; border-radius:8px; font-size:13px; }
-    .reasoning-block[open] { border-left-color:#f59e0b; background:rgba(251,191,36,.12); }
-    .reasoning-block summary { cursor:pointer; color:#b45309; font-size:13px; font-weight:600; outline:none; user-select:none; }
-    .reasoning-block summary:hover { color:#92400e; }
-    .reasoning-text { margin-top:10px; color:var(--mute); white-space:pre-wrap; line-height:1.6; }
-
-    .card p { margin:0 0 .5em; }
-    .card-choice .opt, .card-choice .opt-disabled { display:block; padding:10px 14px; margin:6px 0; border:1px solid var(--border); border-radius:8px; font-size:14px; }
-    .card-choice .opt { cursor:pointer; transition:all .2s; }
-    .card-choice .opt:hover { background:rgba(102,126,234,.1); border-color:var(--accent); }
-    .card-choice .opt.sel { background:rgba(102,126,234,.15); border-color:var(--accent); }
-    .card-tip { background:linear-gradient(135deg,rgba(102,126,234,.1),rgba(124,58,237,.1)); border-left:4px solid var(--accent); }
-    .pbar { height:8px; background:var(--bg2); border-radius:4px; margin:8px 0; overflow:hidden; }
-    .pfill { height:100%; background:linear-gradient(90deg,var(--accent),#7c3aed); border-radius:4px; transition:width .5s; }
-    .card-input { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); color:var(--text); font-size:15px; outline:none; }
-    .card-input:focus { border-color:var(--accent); }
-    .slider-wrap { display:flex; align-items:center; gap:16px; margin-top:8px; }
-    .slider-input { flex:1; -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:rgba(255,255,255,.1); outline:none; padding:0; }
-    .slider-input::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:2px solid var(--accent); cursor:pointer; box-shadow:0 0 8px rgba(102,126,234,.4); transition:transform .2s; }
-    .slider-input::-webkit-slider-thumb:hover { transform:scale(1.15); }
-    .slider-input::-moz-range-thumb { width:18px; height:18px; border-radius:50%; background:#fff; border:2px solid var(--accent); cursor:pointer; box-shadow:0 0 8px rgba(102,126,234,.4); }
-    .slider-val { min-width:40px; text-align:center; font-weight:600; color:var(--accent); font-size:15px; background:rgba(102,126,234,.1); padding:4px 10px; border-radius:6px; }
-    .switch-wrap { display:inline-flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer; }
-    .card-toggle { display:none; }
-    .switch-track { width:44px; height:24px; border-radius:12px; background:var(--border); position:relative; transition:background .2s; }
-    .switch-track::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .2s; }
-    .card-toggle:checked + .switch-track { background:var(--accent); }
-    .card-toggle:checked + .switch-track::after { transform:translateX(20px); }
-    .card-invalid { animation:shake .4s; border-color:#ef4444 !important; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
-    .card-invalid .opt { border-color:#ef4444; }
-    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-    .submitted-tag { display:inline-block; padding:6px 12px; background:rgba(34,197,94,.12); color:#22c55e; border-radius:8px; font-size:13px; font-weight:600; }
-    .sum-tbl { width:100%; border-collapse:collapse; }
-    .sum-tbl th { padding:8px 12px; text-align:left; font-weight:600; color:var(--mute); font-size:13px; border-bottom:2px solid var(--border); }
-    .sum-tbl td { padding:10px 12px; border-bottom:1px solid var(--border); }
-    .sum-tbl tbody tr:last-child td { border-bottom:none; }
-    .bts { display:flex; gap:12px; margin-top:16px; }
-    .btn-pri { flex:1; padding:12px 24px; background:var(--accent); color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; }
-    .btn-ghost { flex:1; padding:12px 24px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:10px; cursor:pointer; font-size:15px; }
-    .btn-submit { background:var(--accent); color:#fff; border:none; padding:12px 32px; border-radius:10px; cursor:pointer; font-size:15px; margin:12px 0; }
-    .disabled { pointer-events:none; opacity:.5; }
-
-    .input-area { padding:16px 20px; border-top:1px solid var(--border); background:var(--bg2); }
-    .input-bar { display:flex; gap:12px; align-items:flex-end; }
-    .input-bar textarea { flex:1; padding:12px 16px; background:var(--bg3); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:15px; resize:none; min-height:48px; max-height:150px; outline:none; font-family:inherit; }
-    .input-bar textarea:focus { border-color:var(--accent); }
-    .input-bar button { padding:12px 24px; background:var(--accent); color:#fff; border:none; border-radius:12px; cursor:pointer; font-size:15px; flex-shrink:0; }
-    .input-bar button:disabled { opacity:.5; }
-    .quick-replies { display:flex; gap:8px; margin-top:12px; overflow-x:auto; }
-    .quick-replies button { padding:8px 16px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:20px; cursor:pointer; font-size:13px; white-space:nowrap; }
-    .quick-replies button:hover { background:rgba(102,126,234,.1); color:var(--text); }
-    .status { font-size:12px; color:var(--mute); margin-top:8px; }
-    .status.error { color:#ef4444; }
-    .status.success { color:#22c55e; }
-    .dbg-bar { display:flex; gap:6px; justify-content:flex-end; margin-top:8px; }
-    .dbg-btn { padding:2px 10px; background:var(--bg3); color:var(--mute); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; }
-    .dbg-btn.on { background:rgba(102,126,234,.2); color:var(--accent); border-color:var(--accent); }
-
-    /* ── 知识图谱 ── */
-    .graph-panel { border-top:1px solid var(--border); background:var(--bg2); transition:all .3s; }
-    .graph-header { display:flex; justify-content:space-between; align-items:center; padding:8px 16px; cursor:pointer; user-select:none; }
-    .graph-title { font-size:13px; font-weight:600; color:var(--mute); }
-    .graph-toggle { background:none; border:none; color:var(--mute); font-size:16px; cursor:pointer; padding:0 4px; line-height:1; }
-    .graph-body { position:relative; padding:8px 16px 12px; overflow:hidden; overflow-x:auto; transition:max-height .3s; }
-    .graph-body.collapsed { max-height:0; padding-top:0; padding-bottom:0; }
-    .graph-body svg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
-    .graph-nodes { position:relative; }
-    .g-node {
-      position:absolute; transform:translate(-50%,-50%);
-      padding:6px 14px; border-radius:20px; font-size:13px; font-weight:500;
-      white-space:nowrap; cursor:pointer; text-align:center;
-      transition:all .25s; user-select:none; z-index:1;
+    :root {
+      --bg: #0a0a1a; --bg2: #12122a; --bg3: #1a1a3e; --text: #e4e4e7; --mute: #71717a;
+      --accent: #667eea; --accent2: #7c3aed; --border: #272750;
+      --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --blue: #3b82f6;
     }
-    .g-node.done { background:#22c55e20; color:#22c55e; border:2px solid #22c55e; }
-    .g-node.current { background:#667eea20; color:var(--accent); border:2px solid var(--accent);
-      animation: node-pulse 2s infinite; }
-    .g-node.locked { background:var(--bg3); color:#52525b; border:2px solid #3f3f46; cursor:not-allowed; }
-    .g-node.unlocked { background:var(--bg3); color:var(--mute); border:2px solid var(--border); }
-    .g-node.unlocked:hover { border-color:var(--accent); color:var(--text); }
-    @keyframes node-pulse {
-      0%,100% { box-shadow:0 0 0 0 rgba(102,126,234,.4); }
-      50% { box-shadow:0 0 0 8px rgba(102,126,234,0); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", sans-serif;
+      background: var(--bg); color: var(--text);
+      width: 100vw; height: 100vh; overflow: hidden;
+      user-select: none;
     }
-    .g-line { fill:none; stroke:var(--border); stroke-width:2; }
-    .g-line.done { stroke:#22c55e; stroke-width:2.5; }
-    .g-line.active { stroke:var(--accent); stroke-width:2; stroke-dasharray:6 3; animation: dash-flow .6s linear infinite; }
-    @keyframes dash-flow { to { stroke-dashoffset:-9; } }
+
+    /* ═══ 全屏图谱 ═══ */
+    .graph-scene {
+      position: fixed; inset: 0;
+      cursor: grab; overflow: hidden;
+    }
+    .graph-scene:active { cursor: grabbing; }
+    .graph-scene.panning { cursor: grabbing; }
+
+    .graph-world {
+      position: absolute;
+      transform-origin: 0 0; transition: none;
+    }
+    .graph-world.dragging { transition: none; }
+
+    .graph-svg {
+      position: absolute; top: 0; left: 0;
+      pointer-events: none; overflow: visible;
+    }
+
+    /* ── 节点 ── */
+    .gnode {
+      position: absolute;
+      padding: 10px 14px;
+      border-radius: 12px;
+      min-width: 160px;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      background: var(--bg2);
+      border: 2px solid var(--border);
+      z-index: 2;
+      pointer-events: auto;
+      transform: translate(-50%, -50%);
+    }
+    .gnode:hover {
+      transform: translate(-50%, -50%) scale(1.05) !important;
+      box-shadow: 0 4px 24px rgba(102,126,234,.3);
+      z-index: 10;
+    }
+    .gnode.completed { border-color: var(--green); background: rgba(34,197,94,.08); }
+    .gnode.learning { border-color: var(--accent); background: rgba(102,126,234,.12);
+      animation: nodeGlow 2s infinite; }
+    .gnode.diagnosed { border-color: var(--blue); background: rgba(59,130,246,.08); }
+    .gnode.locked { border-color: #3f3f5a; background: #0e0e24; cursor: not-allowed; opacity: .5; }
+    .gnode.unlocked { border-color: var(--border); }
+    .gnode.unlocked:hover { border-color: var(--accent); }
+
+    @keyframes nodeGlow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(102,126,234,.3); }
+      50% { box-shadow: 0 0 16px 4px rgba(102,126,234,.15); }
+    }
+
+    .gnode-title {
+      font-size: 14px; font-weight: 600; margin-bottom: 6px;
+      color: var(--text);
+    }
+    .gnode.locked .gnode-title { color: #52526b; }
+
+    .gnode-meta {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    }
+    .gnode-stage {
+      font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500;
+    }
+    .gnode.completed .gnode-stage { background: rgba(34,197,94,.2); color: var(--green); }
+    .gnode.learning .gnode-stage { background: rgba(102,126,234,.2); color: var(--accent); }
+    .gnode.diagnosed .gnode-stage { background: rgba(59,130,246,.2); color: var(--blue); }
+    .gnode.unlocked .gnode-stage { background: rgba(113,113,122,.15); color: var(--mute); }
+    .gnode.locked .gnode-stage { background: rgba(82,82,107,.15); color: #52526b; }
+
+    .gnode-time {
+      font-size: 11px; color: var(--mute);
+    }
+
+    .gnode-pbar {
+      height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 4px; overflow: hidden;
+    }
+    .gnode-pfill {
+      height: 100%; border-radius: 2px; transition: width .6s;
+      background: var(--accent);
+    }
+    .gnode.completed .gnode-pfill { background: var(--green); }
+
+    .gnode-score {
+      font-size: 11px; color: var(--mute);
+      display: flex; justify-content: space-between;
+    }
+    .gnode-score .correct { color: var(--green); }
+    .gnode-score .wrong { color: var(--red); }
+
+    /* ── 边线 ── */
+    .gline {
+      fill: none; stroke: var(--border); stroke-width: 2;
+      transition: stroke .4s;
+    }
+    .gline.done { stroke: rgba(34,197,94,.4); stroke-width: 2.5; }
+    .gline.active { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4;
+      animation: dashFlow .6s linear infinite; }
+    @keyframes dashFlow { to { stroke-dashoffset: -10; } }
+
+    /* ── 标题栏 ── */
+    .graph-toolbar {
+      position: fixed; top: 16px; left: 16px; z-index: 20;
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(18,18,42,.85); backdrop-filter: blur(12px);
+      padding: 8px 16px; border-radius: 12px; border: 1px solid var(--border);
+      pointer-events: auto;
+    }
+    .graph-toolbar h1 {
+      font-size: 16px; font-weight: 600; white-space: nowrap;
+    }
+    .graph-toolbar .student-select {
+      padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg3); color: var(--text); font-size: 13px; outline: none;
+      font-family: inherit; cursor: pointer;
+    }
+    .graph-toolbar .zoom-btns {
+      display: flex; gap: 4px;
+    }
+    .graph-toolbar .zoom-btns button {
+      width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg3); color: var(--mute); cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .graph-toolbar .zoom-btns button:hover { color: var(--text); border-color: var(--accent); }
+
+    .graph-legend {
+      display: flex; gap: 10px;
+    }
+    .graph-legend .leg-item {
+      display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--mute);
+    }
+    .graph-legend .leg-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+
+    /* ═══ 聊天抽屉 ═══ */
+    .chat-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      opacity: 0; pointer-events: none; transition: opacity .35s;
+      z-index: 30;
+    }
+    .chat-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    .chat-drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 65%; min-width: 520px;
+      background: var(--bg2); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .35s cubic-bezier(.4,0,.2,1);
+      z-index: 31; box-shadow: -8px 0 40px rgba(0,0,0,.5);
+    }
+    .chat-drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .drawer-header h2 {
+      font-size: 15px; font-weight: 600;
+    }
+    .drawer-close {
+      width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg3); color: var(--mute); cursor: pointer; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .drawer-close:hover { color: var(--text); border-color: var(--accent); }
+
+    .drawer-messages {
+      flex: 1; overflow-y: auto; padding: 16px;
+    }
+
+    .drawer-input-area {
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .drawer-input-bar {
+      display: flex; gap: 8px;
+    }
+    .drawer-input-bar textarea {
+      flex: 1; padding: 10px 14px; background: var(--bg3);
+      border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 14px; resize: none; min-height: 44px; max-height: 120px;
+      outline: none; font-family: inherit;
+    }
+    .drawer-input-bar textarea:focus { border-color: var(--accent); }
+    .drawer-input-bar button {
+      padding: 10px 20px; background: var(--accent); color: #fff;
+      border: none; border-radius: 10px; cursor: pointer; font-size: 14px; flex-shrink: 0;
+    }
+    .drawer-input-bar button:disabled { opacity: .5; }
+
+    .drawer-status {
+      font-size: 12px; color: var(--mute); margin-top: 6px;
+    }
+
+    /* ── 聊天消息样式（抽屉内） ── */
+    .msg, .x-msg { display: flex; gap: 10px; margin-bottom: 14px; animation: msgIn .3s ease; align-items: flex-start; }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } }
+    .msg.user { flex-direction: row-reverse; }
+    .msg.user .bubble { background: var(--accent); color: #fff; border-radius: 14px 0 14px 14px; }
+    .avatar, .x-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .avatar.ai, .x-avatar { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+    .avatar.user { background: var(--bg3); color: var(--mute); border: 1px solid var(--border); }
+    .msg-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .bubble, .x-bubble { max-width: 100%; min-width: 0; padding: 10px 14px; background: var(--bg3); border-radius: 0 14px 14px 14px; line-height: 1.6; font-size: 14px; word-break: break-word; }
+    .bubble p, .x-bubble p { margin: 0 0 6px; } .bubble p:last-child, .x-bubble p:last-child { margin: 0; }
+    .bubble pre, .x-bubble pre { background: var(--bg); border-radius: 8px; padding: 10px; overflow-x: auto; margin: 8px 0; font-size: 13px; }
+    .bubble code, .x-bubble code { font-size: 12px; background: var(--bg); padding: 2px 5px; border-radius: 4px; }
+    .bubble .katex, .x-bubble .katex { font-size: 1.05em; }
+    .bubble .katex-display, .x-bubble .katex-display { overflow-x: auto; margin: 8px 0; }
+    .bubble table, .x-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+    .bubble th, .x-bubble th { background: rgba(255,255,255,.05); font-weight: 600; }
+    .bubble th, .bubble td, .x-bubble th, .x-bubble td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+    .bubble blockquote, .x-bubble blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 2px 10px; color: var(--mute); }
+
+    .reasoning-container { display: flex; flex-direction: column; width: 100%; margin-bottom: 8px; }
+    .reasoning-block { margin-bottom: 6px; padding: 8px 12px; background: rgba(251,191,36,.06); border-left: 3px solid var(--amber); border-radius: 6px; font-size: 12px; }
+    .reasoning-block summary { cursor: pointer; color: #b45309; font-size: 12px; font-weight: 600; outline: none; }
+    .reasoning-text { margin-top: 6px; color: var(--mute); white-space: pre-wrap; line-height: 1.5; }
+
+    /* ── XIUI card styles (compact for drawer) ── */
+    .card-choice .opt, .card-choice .opt-disabled { display: block; padding: 8px 12px; margin: 4px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+    .card-choice .opt { cursor: pointer; transition: all .2s; }
+    .card-choice .opt:hover { background: rgba(102,126,234,.1); border-color: var(--accent); }
+    .card-choice .opt.sel { background: rgba(102,126,234,.15); border-color: var(--accent); }
+    .card-tip { background: linear-gradient(135deg, rgba(102,126,234,.1), rgba(124,58,237,.1)); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: 8px; margin: 8px 0; }
+    .pbar { height: 6px; background: var(--border); border-radius: 3px; margin: 6px 0; overflow: hidden; }
+    .pfill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width .5s; }
+    .card-input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font-size: 14px; outline: none; }
+    .card-input:focus { border-color: var(--accent); }
+    .btn-submit { background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 10px; cursor: pointer; font-size: 14px; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <div class="chat-wrap">
-    <div class="header">
-      <h1>AI 学习助手</h1>
-      <p>基于 XIUI SDK + 大模型的流式聊天体验
-        <button class="dbg-btn" onclick="window._saveHistory?.()" style="margin-left:12px">💾 保存</button>
-        <button class="dbg-btn" onclick="window._restoreHistory?.()">📂 恢复</button>
-      </p>
-    </div>
-    <div class="messages" id="messages"></div>
-    <!-- 知识图谱 -->
-    <div class="graph-panel" id="graph-panel" style="display:none">
-      <div class="graph-header">
-        <span class="graph-title" id="graph-title">知识图谱</span>
-        <button class="graph-toggle" id="graph-toggle" title="折叠/展开">−</button>
-      </div>
-      <div class="graph-body" id="graph-body">
-        <svg id="graph-svg"></svg>
-        <div class="graph-nodes" id="graph-nodes"></div>
-      </div>
-    </div>
-    <div class="input-area">
-      <div class="input-bar">
-        <textarea id="input" placeholder="输入消息..." rows="1"></textarea>
-        <button id="sendBtn" onclick="console.log('send clicked')">发送</button>
-      </div>
-      <div class="status" id="status"></div>
-      <div class="quick-replies">
-        <button data-msg="介绍一下 Python" onclick="console.log('quick clicked:', this.dataset.msg)">介绍一下 Python</button>
-        <button data-msg="出个选择题" onclick="console.log('quick clicked:', this.dataset.msg)">出个选择题</button>
-        <button data-msg="综合测试" onclick="console.log('quick clicked:', this.dataset.msg)">综合测试</button>
-        <button data-msg="确认对话框" onclick="console.log('quick clicked:', this.dataset.msg)">确认对话框</button>
-        <button onclick="window._testStatic()">🔧 静态测试</button>
-      </div>
+
+<!-- ═══ 全屏图谱 ═══ -->
+<div class="graph-scene" id="graphScene">
+  <div class="graph-world" id="graphWorld">
+    <svg class="graph-svg" id="graphSvg"></svg>
+    <div class="graph-nodes" id="graphNodes"></div>
+  </div>
+
+  <!-- 顶部工具栏 -->
+  <div class="graph-toolbar">
+    <h1>知识图谱学习</h1>
+    <select class="student-select" id="studentSelect">
+      <option value="孙悟空">孙悟空</option>
+      <option value="老六">老六</option>
+      <option value="大马猴">大马猴</option>
+      <option value="小蜜蜂">小蜜蜂</option>
+    </select>
+    <div class="zoom-btns">
+      <button id="zoomIn" title="放大">+</button>
+      <button id="zoomOut" title="缩小">−</button>
+      <button id="zoomFit" title="适应屏幕">⊡</button>
     </div>
   </div>
 
-  <script type="module">
-    import { XIUIChat } from '../src/index.js';
+  <!-- 图例 -->
+  <div class="graph-legend" style="position:fixed;bottom:16px;left:16px;z-index:20;background:rgba(18,18,42,.85);backdrop-filter:blur(12px);padding:8px 14px;border-radius:10px;border:1px solid var(--border);display:flex;gap:12px;">
+    <span class="leg-item"><span class="leg-dot" style="background:var(--green)"></span>已完成</span>
+    <span class="leg-item"><span class="leg-dot" style="background:var(--accent)"></span>学习中</span>
+    <span class="leg-item"><span class="leg-dot" style="background:var(--blue)"></span>已诊断</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#71717a"></span>待解锁</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#3f3f5a"></span>已锁定</span>
+  </div>
+</div>
 
-    console.log('[XIUI] Module loaded');
+<!-- ═══ 聊天抽屉 ═══ -->
+<div class="chat-backdrop" id="chatBackdrop"></div>
+<div class="chat-drawer" id="chatDrawer">
+  <div class="drawer-header">
+    <h2 id="drawerTitle">学习对话</h2>
+    <button class="drawer-close" id="drawerClose">✕</button>
+  </div>
+  <div class="drawer-messages" id="drawerMessages"></div>
+  <div class="drawer-input-area">
+    <div class="drawer-input-bar">
+      <textarea id="drawerInput" placeholder="输入消息..." rows="1"></textarea>
+      <button id="drawerSend">发送</button>
+    </div>
+    <div class="drawer-status" id="drawerStatus">就绪</div>
+  </div>
+</div>
 
-    const messagesEl = document.getElementById('messages');
-    const inputEl = document.getElementById('input');
-    const sendBtn = document.getElementById('sendBtn');
-    const statusEl = document.getElementById('status');
+<script type="module">
+  import { XIUIChat } from '../src/index.js';
 
-    const md = markdownit({
-      html: true, breaks: true, linkify: true, typographer: true, tables: true,
-      highlight(str, lang) {
-        if (lang && lang.startsWith('xiui@form:')) {
-          return str;
-        }
-        if (lang && hljs.getLanguage(lang)) {
-          try { return hljs.highlight(str, { language: lang }).value; } catch (_) {}
-        }
-        return '';
+  // ═══ Markdown 渲染 ═══
+  const md = markdownit({
+    html: true, breaks: true, linkify: true, tables: true,
+    highlight(str, lang) {
+      if (lang && lang.startsWith('xiui@form:')) return str;
+      if (lang && hljs.getLanguage(lang)) {
+        try { return hljs.highlight(str, { language: lang }).value; } catch (_) {}
+      }
+      return '';
+    }
+  });
+  const _mdRender = md.render.bind(md);
+  md.render = (src) => {
+    const mathCache = [];
+    let safe = src.replace(/\$\$(.+?)\$\$/gs, (_, f) => { const i = mathCache.push({ d: f.trim(), b: true }) - 1; return `XMATHB${i}XEND`; });
+    safe = safe.replace(/\\\[(.+?)\\\]/gs, (_, f) => { const i = mathCache.push({ d: f.trim(), b: true }) - 1; return `XMATHB${i}XEND`; });
+    safe = safe.replace(/\\\((.+?)\\\)/gs, (_, f) => { const i = mathCache.push({ d: f.trim(), b: false }) - 1; return `XMATHI${i}XEND`; });
+    safe = safe.replace(/\$(.+?)\$/g, (_, f) => { const i = mathCache.push({ d: f.trim(), b: false }) - 1; return `XMATHI${i}XEND`; });
+    let h = _mdRender(safe);
+    mathCache.forEach((m, i) => {
+      try {
+        const kh = katex.renderToString(m.d, { throwOnError: false, displayMode: m.b });
+        h = h.split(m.b ? `XMATHB${i}XEND` : `XMATHI${i}XEND`).join(kh);
+      } catch (_) {
+        h = h.split(m.b ? `XMATHB${i}XEND` : `XMATHI${i}XEND`).join(`<code>${m.d}</code>`);
       }
     });
-    const mdRender = md.render.bind(md);
-    md.render = (src) => {
-      const mathCache = [];
-      // 顺序：先块级 $$...$$ 和 \[...\]，再行内 \(...\) 和 $...$
-      let safeSrc = src.replace(/\$\$(.+?)\$\$/gs, (_, f) => {
-        const idx = mathCache.push({ content: f.trim(), display: true }) - 1;
-        return `XIUIMATHB${idx}XUIEND`;
-      });
-      safeSrc = safeSrc.replace(/\\\[(.+?)\\\]/gs, (_, f) => {
-        const idx = mathCache.push({ content: f.trim(), display: true }) - 1;
-        return `XIUIMATHB${idx}XUIEND`;
-      });
-      safeSrc = safeSrc.replace(/\\\((.+?)\\\)/gs, (_, f) => {
-        const idx = mathCache.push({ content: f.trim(), display: false }) - 1;
-        return `XIUIMATHI${idx}XUIEND`;
-      });
-      safeSrc = safeSrc.replace(/\$(.+?)\$/g, (_, f) => {
-        const idx = mathCache.push({ content: f.trim(), display: false }) - 1;
-        return `XIUIMATHI${idx}XUIEND`;
-      });
-      let html = mdRender(safeSrc);
-      for (let i = 0; i < mathCache.length; i++) {
-        const m = mathCache[i];
-        try {
-          const katexHtml = katex.renderToString(m.content, { throwOnError: false, displayMode: m.display });
-          const placeholder = m.display ? `XIUIMATHB${i}XUIEND` : `XIUIMATHI${i}XUIEND`;
-          html = html.split(placeholder).join(katexHtml);
-        } catch (_) {
-          const placeholder = m.display ? `XIUIMATHB${i}XUIEND` : `XIUIMATHI${i}XUIEND`;
-          html = html.split(placeholder).join(`<code>${m.content}</code>`);
-        }
-      }
-      return html;
+    return h;
+  };
+
+  // ═══ DOM 引用 ═══
+  const graphScene = document.getElementById('graphScene');
+  const graphWorld = document.getElementById('graphWorld');
+  const graphSvg = document.getElementById('graphSvg');
+  const graphNodes = document.getElementById('graphNodes');
+  const studentSelect = document.getElementById('studentSelect');
+  const chatBackdrop = document.getElementById('chatBackdrop');
+  const chatDrawer = document.getElementById('chatDrawer');
+  const drawerTitle = document.getElementById('drawerTitle');
+  const drawerMessages = document.getElementById('drawerMessages');
+  const drawerInput = document.getElementById('drawerInput');
+  const drawerSend = document.getElementById('drawerSend');
+  const drawerStatus = document.getElementById('drawerStatus');
+  const drawerClose = document.getElementById('drawerClose');
+
+  // ═══ 状态 ═══
+  let graphData = null;         // { courseId, courseName, nodes[], edges[] }
+  let currentStudent = '孙悟空';
+  let currentTopic = null;     // 当前会话的知识点 node
+  let isSending = false;
+
+  // 图谱平移/缩放
+  let panX = 300, panY = 40, zoom = 1.0;
+  let isPanning = false, panStart = { x: 0, y: 0 };
+
+  // XIUI Chat
+  const chat = new XIUIChat({ md });
+  const API_URL = '/api/chat';
+
+  // ═══ 知识图谱渲染 ═══
+  async function loadGraph(student = '孙悟空') {
+    try {
+      const res = await fetch(`/api/course/progress?student=${encodeURIComponent(student)}`);
+      if (!res.ok) { console.warn('[Graph] API error:', res.status); return; }
+      graphData = await res.json();
+      renderGraph();
+    } catch (e) { console.warn('[Graph] 加载失败:', e); }
+  }
+
+  function renderGraph() {
+    if (!graphData || !graphData.nodes) return;
+    const { nodes, edges } = graphData;
+
+    // 画布范围
+    const maxX = Math.max(...nodes.map(n => n.x)) + 160;
+    const maxY = Math.max(...nodes.map(n => n.y)) + 100;
+    graphSvg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+    graphSvg.style.width = maxX + 'px';
+    graphSvg.style.height = maxY + 'px';
+
+    // 连线 SVG
+    let svgHtml = '';
+    for (const e of edges) {
+      const from = nodes.find(n => n.id === e.from);
+      const to = nodes.find(n => n.id === e.to);
+      if (!from || !to) continue;
+      const midY = (from.y + to.y) / 2;
+      const path = `M${from.x},${from.y + 24} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 24}`;
+      let cls = 'gline';
+      if (to.stage === 'completed') cls += ' done';
+      else if (to.stage === 'learning') cls += ' active';
+      svgHtml += `<path d="${path}" class="${cls}"/>`;
+    }
+    graphSvg.innerHTML = svgHtml;
+
+    // 节点 DOM
+    const stageLabels = {
+      completed: '已完成', learning: '学习中', diagnosed: '已诊断',
+      unlocked: '待解锁', locked: '已锁定',
     };
-
-    const API_URL = '/api/chat';
-    let chatHistory = [];
-    let isSending = false;
-    let reasoningEl = null;
-    let reasoningDone = false;
-    let reasoningText = '';
-
-    // ═══ 知识图谱 ═══
-    let graphData = null;      // 课程配置
-    let graphProgress = null;  // 学生进度
-    let graphScale = 1;        // 缩放比例
-    const graphPanel = document.getElementById('graph-panel');
-    const graphSvg = document.getElementById('graph-svg');
-    const graphNodes = document.getElementById('graph-nodes');
-    const graphToggle = document.getElementById('graph-toggle');
-    const graphTitle = document.getElementById('graph-title');
-    const graphBody = document.getElementById('graph-body');
-
-    // ═══ 一行接入 ═══
-    const chat = new XIUIChat({ md });
-    let lastAssistantIdx = -1;
-
-    // Submit / Confirm → 调用 API（plugin 自闭环，只负责 UI/状态）
-    chat._onEvent = async (plugin, event, detail) => {
-      if (event !== 'submit') return;
-      const formId = plugin.formId;
-      const result = chat.submit(formId);
-      if (!result.success) return;
-      // 捕获提交态，更新上次 AI 消息的卡片状态
-      if (lastAssistantIdx >= 0) {
-        chatHistory[lastAssistantIdx].cardState = chat.toJSON();
-      }
-      await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
-    };
-
-    // ── 历史保存/恢复 ──
-    const STORAGE_KEY = 'xiui_chat_history';
-    let savedCardState = null; // 提交后暂存的卡片状态
-
-    function saveHistory() {
-      const data = { history: chatHistory, timestamp: Date.now() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      statusEl.textContent = '会话已保存';
-      statusEl.className = 'status success';
-      setTimeout(() => { statusEl.textContent = '就绪'; statusEl.className = 'status'; }, 2000);
+    let nodesHtml = '';
+    for (const n of nodes) {
+      const s = stageLabels[n.stage] || n.stage;
+      const time = n.lastActivity !== '—' ? n.lastActivity.slice(0, 10) : '—';
+      nodesHtml += `
+        <div class="gnode ${n.stage}" data-node="${n.id}"
+          style="left:${n.x}px;top:${n.y}px">
+          <div class="gnode-title">${n.name}</div>
+          <div class="gnode-meta">
+            <span class="gnode-stage">${s}</span>
+            <span class="gnode-time">${time}</span>
+          </div>
+          <div class="gnode-pbar"><div class="gnode-pfill" style="width:${n.progress}%"></div></div>
+          <div class="gnode-score">
+            <span>进度 ${n.progress}%</span>
+            <span>
+              ${n.totalAttempts > 0 ? `<span class="correct">✓${n.correct}</span> <span class="wrong">✗${n.wrong}</span>` : '—'}
+            </span>
+          </div>
+        </div>`;
     }
+    graphNodes.innerHTML = nodesHtml;
+    graphNodes.style.width = maxX + 'px';
+    graphNodes.style.height = maxY + 'px';
 
-    function restoreHistory() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) { statusEl.textContent = '无保存的历史'; statusEl.className = 'status error'; return; }
-      const data = JSON.parse(raw);
-      if (!data.history || !data.history.length) return;
-      messagesEl.innerHTML = '';
-      chatHistory = [];
-      lastAssistantIdx = -1;
-      for (const msg of data.history) {
-        if (msg.role === 'user') {
-          // 隐藏操作消息（xiui@submit/confirm）不渲染到 UI，但保留在 chatHistory 中
-          const isHidden = /xiui@(?:submit|confirm):/.test(msg.content);
-          if (!isHidden) addUserMsg(msg.content);
-          chatHistory.push(msg);
-        } else {
-          chatHistory.push(msg);
-          chat.renderMessage(messagesEl, msg.content, msg.cardState);
-          lastAssistantIdx = chatHistory.length - 1;
-        }
-      }
-      statusEl.textContent = '历史已恢复';
-      statusEl.className = 'status success';
-      setTimeout(() => { statusEl.textContent = '就绪'; statusEl.className = 'status'; }, 2000);
-    }
-    window._saveHistory = saveHistory;
-    window._restoreHistory = restoreHistory;
-
-    function addUserMsg(text) {
-      const msg = document.createElement('div');
-      msg.className = 'msg user';
-      msg.innerHTML = '<div class="avatar user">U</div><div class="bubble"></div>';
-      msg.querySelector('.bubble').textContent = text;
-      messagesEl.appendChild(msg);
-      scrollToBottom();
-    }
-
-    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
-
-    // ═══ 知识图谱 — 渲染 ═══
-    async function loadKnowledgeGraph(student = '孙悟空') {
-      try {
-        const [courseRes, progressRes] = await Promise.all([
-          fetch('/api/course'),
-          fetch(`/api/course/progress?student=${encodeURIComponent(student)}`)
-        ]);
-        graphData = await courseRes.json();
-        graphProgress = await progressRes.json();
-        if (graphData.nodes) renderKnowledgeGraph();
-      } catch (e) { console.warn('[Graph] 加载失败:', e); }
-    }
-
-    function renderKnowledgeGraph() {
-      if (!graphData || !graphProgress) return;
-      graphPanel.style.display = '';
-      graphTitle.textContent = graphData.name;
-      const scale = graphScale;
-      const nodes = graphData.nodes;
-      const edges = graphData.edges;
-
-      // 计算 SVG 画布尺寸
-      const maxX = Math.max(...nodes.map(n => n.x)) + 100;
-      const maxY = Math.max(...nodes.map(n => n.y)) + 60;
-      const svgW = maxX * scale, svgH = maxY * scale;
-      graphSvg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
-      graphSvg.setAttribute('width', svgW);
-      graphSvg.setAttribute('height', svgH);
-      graphSvg.style.position = 'absolute';
-
-      // 画连线
-      let svgHtml = '';
-      for (const e of edges) {
-        const from = nodes.find(n => n.id === e.from);
-        const to = nodes.find(n => n.id === e.to);
-        if (!from || !to) continue;
-        const midY = (from.y + to.y) / 2;
-        const path = `M${from.x},${from.y + 12} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 12}`;
-        const edgeDone = graphProgress.completed.includes(e.to);
-        const edgeActive = graphProgress.current === e.to && !graphProgress.completed.includes(e.to);
-        let cls = 'g-line';
-        if (edgeDone) cls += ' done';
-        else if (edgeActive) cls += ' active';
-        svgHtml += `<path d="${path}" class="${cls}"/>`;
-      }
-      graphSvg.innerHTML = svgHtml;
-
-      // 节点
-      let nodesHtml = '';
-      for (const n of nodes) {
-        const isDone = graphProgress.completed.includes(n.id);
-        const isCurrent = graphProgress.current === n.id;
-        const isLocked = graphProgress.locked.includes(n.id);
-        let cls = 'g-node';
-        let label = '';
-        if (isDone) { cls += ' done'; label = ' ✓'; }
-        else if (isCurrent) { cls += ' current'; }
-        else if (isLocked) { cls += ' locked'; label = ' 🔒'; }
-        else { cls += ' unlocked'; }
-        nodesHtml += `<div class="${cls}" data-node="${n.id}"
-          style="left:${n.x * scale}px;top:${n.y * scale}px"
-          title="${n.brief}">${n.name}${label}</div>`;
-      }
-      graphNodes.innerHTML = nodesHtml;
-      graphNodes.style.width = maxX * scale + 'px';
-      graphNodes.style.height = maxY * scale + 'px';
-
-      // 点击节点 → 触发学习
-      graphNodes.querySelectorAll('.g-node:not(.locked)').forEach(el => {
-        el.onclick = () => {
-          const nodeId = el.dataset.node;
-          const node = graphData.nodes.find(n => n.id === nodeId);
-          if (node && !isSending) {
-            inputEl.value = `学习「${node.name}」`;
-            send();
-          }
-        };
-      });
-    }
-
-    // 折叠/展开
-    const graphHeader = graphPanel.querySelector('.graph-header');
-    graphHeader.onclick = (e) => {
-      if (e.target === graphToggle) return;
-      graphBody.classList.toggle('collapsed');
-      graphToggle.textContent = graphBody.classList.contains('collapsed') ? '+' : '−';
-    };
-    graphToggle.onclick = (e) => {
-      e.stopPropagation();
-      graphBody.classList.toggle('collapsed');
-      graphToggle.textContent = graphBody.classList.contains('collapsed') ? '+' : '−';
-    };
-
-    async function send() {
-      const text = inputEl.value.trim();
-      if (!text || isSending) return;
-      inputEl.value = '';
-      addUserMsg(text);
-      await callAI(text);
-    }
-
-    async function quickSend(text) { inputEl.value = text; await send(); }
-
-    async function callAI(message) {
-      isSending = true;
-      sendBtn.disabled = true;
-      statusEl.textContent = 'AI 思考中...';
-      statusEl.className = 'status';
-
-      const stream = chat.createStream(messagesEl);
-      const bubble = stream.bubble;
-
-      reasoningEl = null;
-      reasoningDone = false;
-      reasoningText = '';
-      let reasonRenderPending = false;
-
-      try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, history: chatHistory.slice(-10) })
-        });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '', aiResponse = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n\n');
-          buf = lines.pop() || '';
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const d = JSON.parse(line.slice(6));
-              if (d.status === 'thinking') statusEl.textContent = '深度思考中...';
-              if (d.reasoning_content) {
-                console.log('[XIUI] reasoning:', d.reasoning_content.slice(0, 80));
-                reasoningText += d.reasoning_content;
-                if (!reasoningEl) {
-                  reasoningEl = document.createElement('details');
-                  reasoningEl.className = 'reasoning-block';
-                  reasoningEl.innerHTML = '<summary>查看模型思考过程</summary><div class="reasoning-text"></div>';
-                  bubble.insertBefore(reasoningEl, bubble.firstChild);
-                  reasoningEl.open = true;
-                }
-                // 批处理：RAF 避免逐块全量替换闪烁
-                if (!reasonRenderPending) {
-                  reasonRenderPending = true;
-                  requestAnimationFrame(() => {
-                    reasonRenderPending = false;
-                    const el = reasoningEl;
-                    if (!el) return;
-                    const rtEl = el.querySelector('.reasoning-text');
-                    if (rtEl) rtEl.innerHTML = md.render(reasoningText);
-                  });
-                }
-              }
-              if (d.reasoning_end && reasoningEl) {
-                reasoningDone = true;
-                reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
-              }
-              if (d.content) {
-                if (!reasoningDone && reasoningEl) {
-                  reasoningDone = true;
-                  reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
-                }
-                aiResponse += d.content;
-                chat.feed(d.content);
-                statusEl.textContent = '回复中...';
-              }
-              if (d.done) {
-                if (reasoningEl && !reasoningDone) {
-                  reasoningDone = true;
-                  reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
-                }
-                // 确保最后一批思考内容渲染完成
-                if (reasoningEl) {
-                  const rtEl = reasoningEl.querySelector('.reasoning-text');
-                  if (rtEl) rtEl.innerHTML = md.render(reasoningText);
-                }
-                chat.flush();
-              }
-            } catch (e) { console.error('Parse error:', e); }
-          }
-        }
-
-        chatHistory.push({ role: 'user', content: message });
-        chatHistory.push({ role: 'assistant', content: aiResponse });
-        lastAssistantIdx = chatHistory.length - 1;  // 待提交后补 cardState
-
-        // 调试面板
-        const rawView = document.createElement('pre');
-        rawView.className = 'raw-view';
-        rawView.style.cssText = 'display:none;white-space:pre-wrap;word-break:break-word;font-size:13px;margin:8px 0;padding:12px;background:var(--bg);border-radius:8px;font-family:Monaco,monospace;';
-        rawView.textContent = aiResponse;
-        bubble.appendChild(rawView);
-        const dbgBar = document.createElement('div');
-        dbgBar.className = 'dbg-bar';
-        dbgBar.innerHTML = '<button class="dbg-btn on" data-mode="render">渲染</button><button class="dbg-btn" data-mode="raw">原始</button>';
-        bubble.appendChild(dbgBar);
-        dbgBar.querySelectorAll('button').forEach(btn => {
-          btn.onclick = () => {
-            dbgBar.querySelectorAll('button').forEach(b => b.classList.remove('on'));
-            btn.classList.add('on');
-            const isRaw = btn.dataset.mode === 'raw';
-            rawView.style.display = isRaw ? '' : 'none';
-            bubble.querySelectorAll('.x-text,.x-card,.reasoning-block,.x-sk,.x-pv').forEach(el => el.style.display = isRaw ? 'none' : '');
-          };
-        });
-        statusEl.textContent = '就绪';
-        statusEl.className = 'status success';
-      } catch (error) {
-        console.error('API error:', error);
-        statusEl.textContent = '连接失败，请检查后端服务';
-        statusEl.className = 'status error';
-        bubble.innerHTML = '<div style="color:#ef4444">连接失败，请检查后端服务是否启动。</div>';
-      } finally {
-        isSending = false;
-        sendBtn.disabled = false;
-        // 每次对话后刷新知识图谱进度
-        loadKnowledgeGraph();
-      }
-    }
-
-    inputEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    });
-
-    async function init() {
-      sendBtn.addEventListener('click', send);
-      document.querySelectorAll('.quick-replies button').forEach(btn => {
-        btn.addEventListener('click', () => quickSend(btn.dataset.msg));
-      });
-
-      chat.createStream(messagesEl);
-      const welcome = [
-        '👋 你好！我是你的 AI 学习助手。', '',
-        '我可以帮助你学习编程知识，包括：',
-        '- **Python** 基础与进阶',
-        '- **前端开发** (HTML/CSS/JS)',
-        '- **算法与数据结构**', '',
-        '> 💡 点击下方快捷按钮开始体验，或输入你想问的问题！'
-      ];
-      const textContent = welcome.join('\n');
-      let i = 0;
-      const tick = () => {
-        if (i >= textContent.length) return;
-        chat.feed(textContent[i]); i++;
-        setTimeout(tick, 30 + Math.random() * 20);
+    // 节点点击
+    graphNodes.querySelectorAll('.gnode:not(.locked)').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const nodeId = el.dataset.node;
+        const node = graphData.nodes.find(n => n.id === nodeId);
+        if (node) openChat(node);
       };
-      tick();
+    });
 
-      // 加载知识图谱
-      await loadKnowledgeGraph();
+    applyTransform();
+  }
 
-      try {
-        const res = await fetch('/api/health');
-        if (res.ok) { statusEl.textContent = '后端服务已连接'; statusEl.className = 'status success'; }
-      } catch (e) { statusEl.textContent = '后端服务未启动'; statusEl.className = 'status error'; }
+  function applyTransform() {
+    graphWorld.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  }
+
+  // ═══ 图谱平移/缩放 ═══
+  graphScene.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.gnode') || e.target.closest('.graph-toolbar') || e.target.closest('.graph-legend')) return;
+    isPanning = true; panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    graphScene.classList.add('panning');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isPanning = false; graphScene.classList.remove('panning');
+  });
+
+  graphScene.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = graphScene.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newZoom = Math.max(0.3, Math.min(2.0, zoom + delta));
+    // 以鼠标位置为中心缩放
+    panX = mx - (mx - panX) * (newZoom / zoom);
+    panY = my - (my - panY) * (newZoom / zoom);
+    zoom = newZoom;
+    applyTransform();
+  }, { passive: false });
+
+  document.getElementById('zoomIn').onclick = () => { zoom = Math.min(2.0, zoom + 0.15); applyTransform(); };
+  document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.3, zoom - 0.15); applyTransform(); };
+  document.getElementById('zoomFit').onclick = () => {
+    zoom = 1.0;
+    // 自适应：让图谱居中
+    if (graphData && graphData.nodes) {
+      const maxX = Math.max(...graphData.nodes.map(n => n.x)) + 160;
+      const maxY = Math.max(...graphData.nodes.map(n => n.y)) + 100;
+      panX = (window.innerWidth - maxX) / 2;
+      panY = Math.max(20, (window.innerHeight - maxY) / 2);
+    } else {
+      panX = 300; panY = 40;
     }
+    applyTransform();
+  };
 
-    window._testStatic = () => {
-      messagesEl.innerHTML = '';
-      const testText = `以下是一个用于调整阈值的滑块示例：
+  // ═══ 聊天抽屉 ═══
+  let chatHistory = [];
+  let lastAssistantIdx = -1;
 
-\`\`\`xiui@form:s1:slider:q1
-阈值
-0-100-1-50
-\`\`\`
+  function openChat(node) {
+    currentTopic = node;
+    drawerTitle.textContent = node.name;
+    drawerMessages.innerHTML = '';
+    chatHistory = [];
+    lastAssistantIdx = -1;
+    drawerInput.value = '';
+    drawerStatus.textContent = '就绪';
+    drawerStatus.style.color = '';
 
-\`\`\`xiui@form:s1:switch:q2
-启用提醒
-false
-\`\`\`
+    // 重置 XIUI Chat
+    chat.reset?.();
+    chat.createStream(drawerMessages);
 
-\`\`\`xiui@form:s1:submit:ok
-提交
-\`\`\``;
-      chat.renderMessage(messagesEl, testText);
-    };
+    // 欢迎消息
+    const welcomeHtml = `<div class="msg"><div class="avatar ai">AI</div><div class="bubble"><p>你好！你选择了 <strong>${node.name}</strong>。</p><p>${node.brief || ''}</p><p>你可以开始提问或学习了。</p></div></div>`;
+    drawerMessages.innerHTML = welcomeHtml;
 
-    init();
-  </script>
+    chatBackdrop.classList.add('open');
+    chatDrawer.classList.add('open');
+    setTimeout(() => drawerInput.focus(), 400);
+  }
+
+  function closeChat() {
+    chatBackdrop.classList.remove('open');
+    chatDrawer.classList.remove('open');
+    currentTopic = null;
+    // 刷新图谱数据
+    loadGraph(currentStudent);
+  }
+
+  chatBackdrop.onclick = closeChat;
+  drawerClose.onclick = closeChat;
+
+  // ═══ 聊天逻辑 ═══
+  chat._onEvent = async (plugin, event, detail) => {
+    if (event !== 'submit') return;
+    const formId = plugin.formId;
+    const result = chat.submit(formId);
+    if (!result.success) return;
+    if (lastAssistantIdx >= 0) {
+      chatHistory[lastAssistantIdx].cardState = chat.toJSON();
+    }
+    await callAI('用户提交：\n```xiui@submit:' + formId + '\n' + JSON.stringify(result.data) + '\n```');
+  };
+
+  function addUserMsg(text) {
+    const msg = document.createElement('div');
+    msg.className = 'msg user';
+    msg.innerHTML = '<div class="avatar user">U</div><div class="bubble"></div>';
+    msg.querySelector('.bubble').textContent = text;
+    drawerMessages.appendChild(msg);
+    drawerMessages.scrollTop = drawerMessages.scrollHeight;
+  }
+
+  async function sendChat() {
+    const text = drawerInput.value.trim();
+    if (!text || isSending) return;
+    drawerInput.value = '';
+    addUserMsg(text);
+    await callAI(text);
+  }
+
+  async function callAI(message) {
+    isSending = true;
+    drawerSend.disabled = true;
+    drawerStatus.textContent = 'AI 思考中...';
+    drawerStatus.style.color = '';
+
+    const msg = document.createElement('div');
+    msg.className = 'x-msg';
+    msg.innerHTML = '<div class="x-avatar">AI</div><div class="x-bubble"></div>';
+    drawerMessages.appendChild(msg);
+    
+    const bubble = msg.querySelector('.x-bubble');
+    chat.reset();
+    chat._bubble = bubble;
+
+let aiResponse = "";
+    let currentReasoningEl = null;
+    let reasoningBuf = '';
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history: chatHistory.slice(-10) })
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const d = JSON.parse(line.slice(6));
+
+            if (d.done) {
+              chat.flush();
+              currentReasoningEl = null;
+              continue;
+            }
+
+            if (d.type === 'reasoning') {
+              // 模型思考 → 结束当前文本段，独立显示
+              chat.flush();
+              chat._textBuf = '';
+              chat._lineBuf = '';
+              if (!currentReasoningEl) {
+                currentReasoningEl = document.createElement('details');
+                currentReasoningEl.className = 'reasoning-block model-thinking';
+                currentReasoningEl.innerHTML = '<summary>💭 模型思考</summary><div class="reasoning-text"></div>';
+                currentReasoningEl.open = true;
+                bubble.appendChild(currentReasoningEl);
+                reasoningBuf = '';
+              }
+              reasoningBuf += d.content;
+              currentReasoningEl.querySelector('.reasoning-text').innerHTML = chat._mdRender(reasoningBuf);
+            }
+
+            if (d.type === 'content') {
+              currentReasoningEl = null;
+              chat.feed(d.content);
+              aiResponse += d.content;
+            }
+
+            if (d.type === 'tool_call' || d.type === 'tool_result') {
+              currentReasoningEl = null;
+              chat.flush();
+              chat._textBuf = '';
+              chat._lineBuf = '';
+
+              const isToolCall = d.type === 'tool_call';
+              const summaryText = isToolCall ? ('🔧 ' + d.label) : ('📋 ' + (d.summary || d.name));
+              const el = document.createElement('details');
+              el.className = 'reasoning-block';
+              el.innerHTML = '<summary>' + summaryText + '</summary>';
+              el.open = true;
+              bubble.appendChild(el);
+
+              // 在工具详情后插入一个空的可见 x-text 锚点，
+              // 让后续 _renderTextNow 在这里渲染最终回复，而不是覆盖之前的文本
+              const anchor = document.createElement('div');
+              anchor.className = 'x-text';
+              bubble.appendChild(anchor);
+            }
+          } catch (e) { console.error('Parse error:', e); }
+        }
+      }
+
+      chat.flush();
+
+      chatHistory.push({ role: 'user', content: message });
+      chatHistory.push({ role: 'assistant', content: aiResponse });
+      lastAssistantIdx = chatHistory.length - 1;
+
+      drawerStatus.textContent = '就绪';
+      drawerStatus.style.color = '#22c55e';
+    } catch (error) {
+      console.error('API error:', error);
+      bubble.textContent = '连接失败，请重试';
+      drawerStatus.textContent = '错误';
+      drawerStatus.style.color = '#ef4444';
+    } finally {
+      isSending = false;
+      drawerSend.disabled = false;
+      loadGraph(currentStudent);
+    }
+  }
+
+  drawerSend.onclick = sendChat;
+  drawerInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  });
+
+  // ESC 关闭抽屉
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && chatDrawer.classList.contains('open')) {
+      closeChat();
+    }
+  });
+
+  // ═══ 切换学生 ═══
+  studentSelect.onchange = () => {
+    currentStudent = studentSelect.value;
+    loadGraph(currentStudent);
+  };
+
+  // ═══ 初始化 ═══
+  loadGraph(currentStudent);
+</script>
 </body>
 </html>

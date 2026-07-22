@@ -7,7 +7,9 @@ from typing import AsyncIterator
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import (
+    BaseMessage, HumanMessage, AIMessage, AIMessageChunk, ToolMessage,
+)
 
 from .tools import (
     read_student_index,
@@ -151,8 +153,12 @@ def create_agent(streaming: bool = False):
 
 
 # ── 流式调用 ───────────────────────────────────────────────────
-async def stream_agent(messages: list[dict]) -> AsyncIterator:
-    """流式运行 ReAct agent，逐块 yield 文本或工具调用信息."""
+async def stream_agent(messages: list[dict[str, str]]) -> AsyncIterator[dict[str, str]]:
+    """流式运行 ReAct agent.
+
+    用 stream_mode="messages" 实现 token 级流式输出。每次请求独立 thread_id，
+    避免 MemorySaver 跨请求状态脏写导致 agent 中断。
+    """
     agent = create_agent(streaming=True)
 
     lc_messages: list[BaseMessage] = []
@@ -164,51 +170,71 @@ async def stream_agent(messages: list[dict]) -> AsyncIterator:
         elif role == "assistant":
             lc_messages.append(AIMessage(content=content))
 
-    config = {"configurable": {"thread_id": "default"}}
+    import datetime, json, uuid
+    config = {"configurable": {"thread_id": uuid.uuid4().hex}}
 
-    seen_tools: set[str] = set()
-    tool_result_summary = ""  # 最近一次工具返回的摘要
+    log_dir = Path(__file__).parent.parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f"events_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
-    async for event in agent.astream(
+    _yielded_tool_names: set[str] = set()
+    # 按 msg.id 跟踪：哪些 AI 消息包含 tool_call（其文本为中间推理）
+    _msgs_with_tools: set[str] = set()
+
+    async for msg, _metadata in agent.astream(
         {"messages": lc_messages},
         config=config,
         stream_mode="messages",
     ):
-        if isinstance(event, tuple):
-            chunk, meta = event
+        if isinstance(msg, AIMessageChunk):
+            msg_id = msg.id or ""
 
-            # 捕获推理模型的思考过程（DeepSeek-R1 / o1 等）
-            addl = getattr(chunk, "additional_kwargs", {}) or {}
-            reasoning = addl.get("reasoning_content", "")
-            if reasoning:
-                yield {"reasoning": reasoning}
-
-            # 检测工具调用
-            tool_calls = getattr(chunk, "tool_calls", None)
-            if tool_calls:
-                for tc in tool_calls:
-                    name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
-                    if name and name not in seen_tools:
-                        seen_tools.add(name)
+            # ── tool_call_chunks 检测 ──
+            tc_chunks = getattr(msg, "tool_call_chunks", None) or []
+            if tc_chunks:
+                _msgs_with_tools.add(msg_id)
+                for tc in tc_chunks:
+                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                    if name and name not in _yielded_tool_names:
+                        _yielded_tool_names.add(name)
                         label = TOOL_LABELS.get(name, name)
-                        yield {"tool": name, "label": f"调用工具：{label}"}
+                        yield {"type": "tool_call", "name": name, "label": f"调用工具：{label}"}
 
-            # 工具返回 → 摘取摘要送入思考面板
-            node = meta.get("langgraph_node", "")
-            if node == "tools":
-                tc = getattr(chunk, "content", "")
-                if tc and isinstance(tc, str) and tool_result_summary != tc[:200]:
-                    tool_result_summary = tc[:200]
-                    # 取第一行有效内容作为摘要
-                    first_line = tc.strip().split("\n")[0].strip()
-                    if first_line and not first_line.startswith("#"):
-                        first_line = first_line[:100]
-                        yield {"reasoning": f"获取结果：{first_line}..."}
+            # ── reasoning_content（DeepSeek 等模型）──
+            reasoning = getattr(msg, "reasoning_content", None) or ""
+            if not reasoning and hasattr(msg, "additional_kwargs"):
+                reasoning = (msg.additional_kwargs or {}).get("reasoning_content", "") or ""
+            if reasoning and isinstance(reasoning, str):
+                yield {"type": "reasoning", "content": reasoning}
 
-            # 输出文本内容（跳过工具调用块和工具回复块）
-            content = getattr(chunk, "content", "")
-            if content and isinstance(content, str) and not tool_calls:
-                # 跳过 ToolMessage 的回显
-                msg_type = getattr(chunk, "type", "")
-                if msg_type != "tool":
-                    yield content
+            # ── text content ── 含 tool_call 的消息 = 推理，否则 = 最终回复
+            content = msg.content or ""
+            if content and isinstance(content, str):
+                if msg_id in _msgs_with_tools:
+                    yield {"type": "reasoning", "content": content}
+                else:
+                    yield {"type": "content", "content": content}
+
+            # 诊断日志
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "kind": "AIMessageChunk",
+                    "msg_id": msg.id or "",
+                    "content": content[:80] if content else None,
+                    "tc_names": [tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None) for tc in tc_chunks],
+                }, ensure_ascii=False) + "\n")
+
+        elif isinstance(msg, ToolMessage):
+            summary = ""
+            if isinstance(msg.content, str):
+                first_line = msg.content.strip().split("\n")[0].strip()
+                if first_line:
+                    summary = f"获取结果：{first_line[:100]}"
+            yield {"type": "tool_result", "name": msg.name or "", "summary": summary}
+
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "kind": "ToolMessage",
+                    "name": msg.name,
+                    "summary": summary,
+                }, ensure_ascii=False) + "\n")
