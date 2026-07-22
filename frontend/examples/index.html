@@ -325,13 +325,11 @@
               }
               if (d.reasoning_end && reasoningEl) {
                 reasoningDone = true;
-                reasoningEl.open = false;
                 reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
               }
               if (d.content) {
                 if (!reasoningDone && reasoningEl) {
                   reasoningDone = true;
-                  reasoningEl.open = false;
                   reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
                 }
                 aiResponse += d.content;
@@ -341,7 +339,6 @@
               if (d.done) {
                 if (reasoningEl && !reasoningDone) {
                   reasoningDone = true;
-                  reasoningEl.open = false;
                   reasoningEl.querySelector('summary').textContent = '思考过程（已完成）';
                 }
                 // 确保最后一批思考内容渲染完成

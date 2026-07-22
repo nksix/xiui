@@ -468,8 +468,8 @@ export class XIUIChat {
     this._cardInfo = null;
     this._cards = [];           // [{ formId, type, typeId, data, plugin }]
     this._submitted = false;
-    this._tPending = undefined;
-    this._tRenderPending = false;
+    this._pendingText = '';
+    this._renderTid = null;
   }
 
   // ─── 内部：plugin 状态变化回调 ──────────────────────
@@ -592,35 +592,13 @@ export class XIUIChat {
 
   _defaultOnText(t) {
     if (!t || !this._bubble) return;
-    // 批处理：每帧最多渲染一次，避免逐字全量替换闪烁
-    this._tPending = t;
-    if (this._tRenderPending) return;
-    this._tRenderPending = true;
-    const self = this;
-    requestAnimationFrame(() => {
-      self._tRenderPending = false;
-      const text = self._tPending;
-      if (!text) return;
-      const lastCard = self._bubble.querySelector('.x-card:last-of-type');
-      let tb;
-      if (lastCard) {
-        tb = lastCard.nextElementSibling;
-        if (!tb || !tb.classList.contains('x-text')) {
-          tb = document.createElement('div');
-          tb.className = 'x-text';
-          lastCard.after(tb);
-        }
-      } else {
-        tb = self._bubble.querySelector('.x-text:last-of-type');
-        if (!tb) {
-          tb = document.createElement('div');
-          tb.className = 'x-text';
-          self._bubble.appendChild(tb);
-        }
-      }
-      tb.innerHTML = self._mdRender(text);
-      self._bubble.scrollIntoView({ block: 'end', behavior: 'instant' });
-    });
+    // 30ms debounce：平滑流式输出，避免逐字全量渲染
+    this._pendingText = t;
+    if (this._renderTid) return;
+    this._renderTid = setTimeout(() => {
+      this._renderTid = null;
+      this._renderTextNow(this._pendingText);
+    }, 30);
   }
 
   _defaultOnCardBegin(formId, type, typeId) {
@@ -633,14 +611,12 @@ export class XIUIChat {
 
   _defaultOnCardUpdate(t) {
     if (!this._bubble) return;
-    // 批处理：跟 _defaultOnText 共用同一个 RAF 锁
-    this._cPending = t;
-    if (this._tRenderPending) return;  // 共用文本渲染的 RAF 锁
-    this._tRenderPending = true;
+    // 共用 _defaultOnText 的 debounce 锁
+    if (this._renderTid) return;
     const self = this;
-    requestAnimationFrame(() => {
-      self._tRenderPending = false;
-      const text = self._cPending || self._tPending;
+    const doRender = () => {
+      self._renderTid = null;
+      const text = t;
       if (!text) return;
       const sk = self._bubble.querySelector('.x-sk');
       if (sk) sk.remove();
@@ -651,7 +627,8 @@ export class XIUIChat {
         self._bubble.appendChild(pv);
       }
       pv.innerHTML = self._mdRender(text);
-    });
+    };
+    this._renderTid = setTimeout(doRender, 30);
   }
 
   _defaultOnCard(card, el) {
@@ -705,6 +682,9 @@ export class XIUIChat {
 
   flush() {
     if (this._flushTimer) { clearTimeout(this._flushTimer); this._flushTimer = null; }
+    // 清掉 debounce 定时器，立即渲染最后一批文本
+    if (this._renderTid) { clearTimeout(this._renderTid); this._renderTid = null; }
+    if (this._pendingText) { this._renderTextNow(this._pendingText); this._pendingText = ''; }
     if (this._lineBuf && this._state === 'card') {
       if (FENCE_END_RE.test(this._lineBuf)) {
         this._lineBuf = '';
@@ -716,6 +696,29 @@ export class XIUIChat {
     }
     this._state = 'text';
     if (this._onDone) this._onDone();
+  }
+
+  _renderTextNow(t) {
+    if (!t || !this._bubble) return;
+    const lastCard = this._bubble.querySelector('.x-card:last-of-type');
+    let tb;
+    if (lastCard) {
+      tb = lastCard.nextElementSibling;
+      if (!tb || !tb.classList.contains('x-text')) {
+        tb = document.createElement('div');
+        tb.className = 'x-text';
+        lastCard.after(tb);
+      }
+    } else {
+      tb = this._bubble.querySelector('.x-text:last-of-type');
+      if (!tb) {
+        tb = document.createElement('div');
+        tb.className = 'x-text';
+        this._bubble.appendChild(tb);
+      }
+    }
+    tb.innerHTML = this._mdRender(t);
+    this._bubble.scrollIntoView({ block: 'end', behavior: 'instant' });
   }
 
   // ─── 替换静态渲染中的 card block ──────────────
