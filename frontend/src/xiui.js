@@ -718,7 +718,11 @@ export class XIUIChat {
       }
     }
     tb.innerHTML = this._mdRender(t);
-    this._bubble.scrollIntoView({ block: 'end', behavior: 'instant' });
+    // 仅当用户在底部附近时才跟随滚动，避免强制跳动
+    const ct = this._bubble.closest('.messages') || this._bubble.parentElement?.parentElement;
+    if (ct && ct.scrollHeight - ct.scrollTop - ct.clientHeight < 80) {
+      ct.scrollTop = ct.scrollHeight;
+    }
   }
 
   // ─── 替换静态渲染中的 card block ──────────────
