@@ -55,13 +55,14 @@ async def health():
 
 # ── 知识图谱 ──────────────────────────────────────────────────
 _COURSE_CACHE = {}
-_STUDENTS_DIR = PROJECT_ROOT / "data" / "students"
+_STUDENTS_DIR = PROJECT_ROOT / "backend" / "data" / "students"
+_DATA_DIR = PROJECT_ROOT / "backend" / "data"
 
 
 @app.get("/api/course")
 async def get_course():
     """返回课程知识图谱配置."""
-    course_file = PROJECT_ROOT / "data" / "courses" / "computer_vision.json"
+    course_file = _DATA_DIR / "courses" / "computer_vision.json"
     if "cv" not in _COURSE_CACHE:
         _COURSE_CACHE["cv"] = json.loads(course_file.read_text(encoding="utf-8"))
     return _COURSE_CACHE["cv"]
@@ -72,7 +73,7 @@ async def get_progress(student: str = ""):
     """返回学生在课程上的学习进度."""
     if not student:
         return {"error": "student param required"}
-    course_file = PROJECT_ROOT / "data" / "courses" / "computer_vision.json"
+    course_file = _DATA_DIR / "courses" / "computer_vision.json"
     course = json.loads(course_file.read_text(encoding="utf-8"))
     node_ids = [n["id"] for n in course["nodes"]]
     edges = course.get("edges", [])
