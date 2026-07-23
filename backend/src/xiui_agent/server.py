@@ -34,12 +34,14 @@ async def examples_index():
 
 @app.get("/src/{path:path}")
 async def src_files(path: str):
-    return FileResponse(FRONTEND_DIR / "src" / path)
+    return FileResponse(FRONTEND_DIR / "src" / path,
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/lib/{path:path}")
 async def lib_files(path: str):
-    return FileResponse(FRONTEND_DIR / "lib" / path)
+    return FileResponse(FRONTEND_DIR / "lib" / path,
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/")

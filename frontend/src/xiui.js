@@ -591,6 +591,26 @@ export class XIUIChat {
     return div.innerHTML.replace(/\n/g, '<br>');
   }
 
+  /** 立即渲染 pending 文字，清除 debounce */
+  _flushPendingText() {
+    if (this._textRenderTid) {
+      clearTimeout(this._textRenderTid);
+      this._textRenderTid = null;
+    }
+    if (this._pendingText) {
+      this._renderTextNow(this._pendingText);
+      this._pendingText = '';
+    }
+  }
+
+  /** 立即渲染 pending 卡片预览，清除 debounce */
+  _flushPendingCard() {
+    if (this._cardRenderTid) {
+      clearTimeout(this._cardRenderTid);
+      this._cardRenderTid = null;
+    }
+  }
+
   _defaultOnText(t) {
     if (!t || !this._bubble) return;
     // 30ms debounce：平滑流式输出，避免逐字全量渲染
@@ -603,6 +623,8 @@ export class XIUIChat {
   }
 
   _defaultOnCardBegin(formId, type, typeId) {
+    // ⚡ 立即 flush 待渲染文本，确保文字在卡片骨架之前
+    this._flushPendingText();
     if (!this._bubble) return;
     const sk = document.createElement('div');
     sk.className = 'x-sk';
@@ -630,6 +652,9 @@ export class XIUIChat {
 
   _defaultOnCard(card, el) {
     if (!this._bubble) return;
+    // ⚡ 清掉可能残留的骨架/预览，以及未 flush 的文字
+    this._flushPendingText();
+    this._flushPendingCard();
     const sk = this._bubble.querySelector('.x-sk');
     const pv = this._bubble.querySelector('.x-pv');
     if (sk) sk.remove();
@@ -752,6 +777,8 @@ export class XIUIChat {
       if (this._state === 'text') {
         const m = line.match(CARD_FENCE_RE);
         if (m) {
+          // ⚡ 立即 flush 待渲染文字，确保在卡片之前挂载
+          this._flushPendingText();
           this._state = 'card';
           this._cardInfo = { formId: m[1], type: m[2], typeId: m[3], attrs: this._parseAttrs(m[4]) };
           if (this._onCardBegin) this._onCardBegin(m[1], m[2], m[3]);

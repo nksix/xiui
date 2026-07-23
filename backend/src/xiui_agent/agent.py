@@ -8,7 +8,7 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import (
-    BaseMessage, HumanMessage, AIMessage, AIMessageChunk, ToolMessage,
+    BaseMessage, HumanMessage, AIMessage, ToolMessage,
 )
 
 from .tools import (
@@ -154,12 +154,13 @@ def create_agent(streaming: bool = False):
 
 # ── 流式调用 ───────────────────────────────────────────────────
 async def stream_agent(messages: list[dict[str, str]]) -> AsyncIterator[dict[str, str]]:
-    """流式运行 ReAct agent.
+    """流式运行 ReAct agent。
 
-    用 stream_mode="messages" 实现 token 级流式输出。每次请求独立 thread_id，
-    避免 MemorySaver 跨请求状态脏写导致 agent 中断。
+    用 stream_mode="updates" 按节点获取完整消息——tool_calls 字段可靠，
+    能精确区分「含 tool_call 的消息文本=推理」 vs 「不含的=最终回复」，
+    无论单轮还是多轮工具调用都不会混淆。
     """
-    agent = create_agent(streaming=True)
+    agent = create_agent(streaming=False)
 
     lc_messages: list[BaseMessage] = []
     for m in messages[-20:]:
@@ -178,63 +179,61 @@ async def stream_agent(messages: list[dict[str, str]]) -> AsyncIterator[dict[str
     log_file = log_dir / f"events_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
     _yielded_tool_names: set[str] = set()
-    # 按 msg.id 跟踪：哪些 AI 消息包含 tool_call（其文本为中间推理）
-    _msgs_with_tools: set[str] = set()
 
-    async for msg, _metadata in agent.astream(
+    async for update in agent.astream(
         {"messages": lc_messages},
         config=config,
-        stream_mode="messages",
+        stream_mode="updates",
     ):
-        if isinstance(msg, AIMessageChunk):
-            msg_id = msg.id or ""
+        for _node_name, node_output in update.items():
+            msgs = node_output.get("messages", [])
+            for msg in msgs:
+                if isinstance(msg, AIMessage):
+                    tool_calls = getattr(msg, "tool_calls", None) or []
+                    has_tools = bool(tool_calls)
 
-            # ── tool_call_chunks 检测 ──
-            tc_chunks = getattr(msg, "tool_call_chunks", None) or []
-            if tc_chunks:
-                _msgs_with_tools.add(msg_id)
-                for tc in tc_chunks:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in _yielded_tool_names:
-                        _yielded_tool_names.add(name)
-                        label = TOOL_LABELS.get(name, name)
-                        yield {"type": "tool_call", "name": name, "label": f"调用工具：{label}"}
+                    # ── tool_calls ──
+                    for tc in tool_calls:
+                        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                        if name and name not in _yielded_tool_names:
+                            _yielded_tool_names.add(name)
+                            label = TOOL_LABELS.get(name, name)
+                            yield {"type": "tool_call", "name": name, "label": f"调用工具：{label}"}
 
-            # ── reasoning_content（DeepSeek 等模型）──
-            reasoning = getattr(msg, "reasoning_content", None) or ""
-            if not reasoning and hasattr(msg, "additional_kwargs"):
-                reasoning = (msg.additional_kwargs or {}).get("reasoning_content", "") or ""
-            if reasoning and isinstance(reasoning, str):
-                yield {"type": "reasoning", "content": reasoning}
+                    # ── reasoning_content（DeepSeek 等模型）──
+                    reasoning = getattr(msg, "reasoning_content", None) or ""
+                    if not reasoning and hasattr(msg, "additional_kwargs"):
+                        reasoning = (msg.additional_kwargs or {}).get("reasoning_content", "") or ""
+                    if reasoning and isinstance(reasoning, str):
+                        yield {"type": "reasoning", "content": reasoning}
 
-            # ── text content ── 含 tool_call 的消息 = 推理，否则 = 最终回复
-            content = msg.content or ""
-            if content and isinstance(content, str):
-                if msg_id in _msgs_with_tools:
-                    yield {"type": "reasoning", "content": content}
-                else:
-                    yield {"type": "content", "content": content}
+                    # ── text content ──
+                    content = msg.content or ""
+                    if content and isinstance(content, str):
+                        evt_type = "reasoning" if has_tools else "content"
+                        for i in range(0, len(content), 3):
+                            yield {"type": evt_type, "content": content[i:i+3]}
 
-            # 诊断日志
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "kind": "AIMessageChunk",
-                    "msg_id": msg.id or "",
-                    "content": content[:80] if content else None,
-                    "tc_names": [tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None) for tc in tc_chunks],
-                }, ensure_ascii=False) + "\n")
+                    # 诊断日志
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "kind": "AIMessage",
+                            "has_tools": has_tools,
+                            "content": content[:80] if content else None,
+                            "tc_names": [tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None) for tc in tool_calls],
+                        }, ensure_ascii=False) + "\n")
 
-        elif isinstance(msg, ToolMessage):
-            summary = ""
-            if isinstance(msg.content, str):
-                first_line = msg.content.strip().split("\n")[0].strip()
-                if first_line:
-                    summary = f"获取结果：{first_line[:100]}"
-            yield {"type": "tool_result", "name": msg.name or "", "summary": summary}
+                elif isinstance(msg, ToolMessage):
+                    summary = ""
+                    if isinstance(msg.content, str):
+                        first_line = msg.content.strip().split("\n")[0].strip()
+                        if first_line:
+                            summary = f"获取结果：{first_line[:100]}"
+                    yield {"type": "tool_result", "name": msg.name or "", "summary": summary}
 
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "kind": "ToolMessage",
-                    "name": msg.name,
-                    "summary": summary,
-                }, ensure_ascii=False) + "\n")
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "kind": "ToolMessage",
+                            "name": msg.name,
+                            "summary": summary,
+                        }, ensure_ascii=False) + "\n")
